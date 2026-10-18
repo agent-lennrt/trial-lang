@@ -410,6 +410,11 @@ func Run(ctx context.Context, programSrc string, d *Deposition) *Result {
 		}
 	}
 
+	// Reconstructing final state is needed only for record and citation assertions.
+	// Outcome and proclamation assertions above use the observed execution.
+	if len(d.Records) == 0 && d.Citing == "" {
+		return res
+	}
 	st, err := court.Examine(ctx, log, c)
 	if err != nil {
 		contradict("examine case: %v", err)
