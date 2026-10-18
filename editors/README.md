@@ -73,8 +73,21 @@ to that line's end.
 - **VS Code / others**: point any generic LSP client at the command
   `trial counsel` for the language id `trial`.
 
-Filings that `INCORPORATE BY REFERENCE` receive parse-level diagnostics only,
-because the language server does not fetch enactments.
+By default, filings that `INCORPORATE BY REFERENCE` receive syntax-only
+diagnostics. Use `trial counsel --canon` to compile documents whose imports all
+come from the bundled canon. In Neovim, change the command above to
+`cmd = { "trial", "counsel", "--canon" }`.
+
+Canon mode resolves transitive imports and catches errors such as a missing
+article, a wrong number of arguments, or a duplicate office. A custom or unknown
+import keeps the whole document on syntax-only checks. No workspace files or
+broker statutes are fetched, and checked documents never execute or retain
+temporary cases between edits.
+
+Some imported compilation errors appear at document start with an explicit
+bundled-import message. The server uses a precise source range only when it can
+independently establish that the error belongs to the open document. This avoids
+highlighting a canon file's line as though it came from your source.
 
 ## Docket view: `trial watch`
 

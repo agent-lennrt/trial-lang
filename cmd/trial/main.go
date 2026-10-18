@@ -1628,6 +1628,7 @@ func newAdvocateServer(log docket.Log, in io.Reader, out io.Writer) *advocate.Se
 
 func counselCmd(ctx context.Context, rest []string) int {
 	fs := commandFlags("counsel")
+	useCanon := fs.Bool("canon", false, "check imports resolved entirely from the bundled canon")
 	if err := fs.Parse(rest); err != nil {
 		return 2
 	}
@@ -1637,7 +1638,7 @@ func counselCmd(ctx context.Context, rest []string) int {
 	fmt.Fprintln(os.Stderr, "trial LSP server listening on stdio")
 	input, closeInput := commandInput(ctx)
 	defer closeInput()
-	srv := &counsel.Server{In: input, Out: os.Stdout, Version: resolveVersion()}
+	srv := &counsel.Server{In: input, Out: os.Stdout, Version: resolveVersion(), Canon: *useCanon}
 	if err := srv.Serve(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "LSP server stopped: %v\n", err)
 		return 1

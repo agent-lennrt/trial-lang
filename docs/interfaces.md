@@ -196,6 +196,19 @@ It handles `initialize`, `shutdown`, `exit`, `textDocument/didOpen`,
 notifications can publish diagnostics. Changes contain one complete document.
 Unsupported request methods return `-32601`.
 
+By default, documents with `INCORPORATE BY REFERENCE` receive syntax-only
+diagnostics. Start `trial counsel --canon` to also compile documents whose
+imports all name bundled statutes, including their transitive dependencies.
+If any import is custom or unknown, the whole document keeps syntax-only checks.
+Counsel does not fetch workspace files or broker statutes. Each check uses fresh
+temporary storage and discards any temporary filing without executing it.
+
+Parse errors retain their ordinary source ranges. A canon compilation error
+uses a local range only if the same rejection is independently reproduced from
+the source alone. Otherwise its range is zero-width at document start and its
+message identifies the bundled-import context; a canon file's line is never
+presented as a local source location. See [ADR 0011](adr/0011-canon-editor-diagnostics.md).
+
 Malformed JSON returns `-32700`; valid JSON with an invalid request envelope
 returns `-32600`. An envelope must have `jsonrpc: "2.0"` and a nonempty method.
 Non-null parameters must be an object or array.

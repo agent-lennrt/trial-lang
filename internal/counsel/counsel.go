@@ -14,6 +14,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/lennrt/trial-lang/canon"
+	"github.com/lennrt/trial-lang/internal/court"
+	"github.com/lennrt/trial-lang/internal/docket"
 	"github.com/lennrt/trial-lang/internal/gregor"
 )
 
@@ -22,6 +25,7 @@ type Server struct {
 	In      io.Reader
 	Out     io.Writer
 	Version string
+	Canon   bool // Check imports that resolve entirely from the bundled canon.
 
 	docs map[string]string // uri -> current text
 }
@@ -415,9 +419,25 @@ type position struct {
 // Diagnose parses and compiles source with Gregor. If the filing incorporates
 // statutes, Diagnose checks syntax only because it has no statute source.
 func Diagnose(src string) []map[string]any {
+	return diagnose(src, false)
+}
+
+func diagnose(src string, useCanon bool) []map[string]any {
 	prog, err := gregor.Parse(src)
+	localRange := true
 	if err == nil && len(prog.Incorporations) == 0 {
 		_, err = gregor.Compile(prog)
+	} else if err == nil && useCanon {
+		err = checkCanonImports(src, prog)
+		if err != nil {
+			// Imported AST lines belong to their statute, not necessarily this
+			// document. A matching independent rejection proves a local range.
+			_, standaloneErr := gregor.Compile(prog)
+			merged, mergedOK := errors.AsType[*gregor.RejectedFiling](err)
+			standalone, standaloneOK := errors.AsType[*gregor.RejectedFiling](standaloneErr)
+			localRange = mergedOK && standaloneOK && merged.Line == standalone.Line &&
+				merged.Col == standalone.Col && merged.Particulars == standalone.Particulars
+		}
 	}
 	if err == nil {
 		return []map[string]any{}
@@ -427,7 +447,12 @@ func Diagnose(src string) []map[string]any {
 	if rej, ok := errors.AsType[*gregor.RejectedFiling](err); ok {
 		line, col, msg = rej.Line, rej.Col, rej.Particulars
 	}
-	start, end := diagnosticRange(src, line, col)
+	var start, end position
+	if localRange {
+		start, end = diagnosticRange(src, line, col)
+	} else {
+		msg = "While checking bundled canon imports: " + msg
+	}
 	return []map[string]any{{
 		"range": map[string]any{
 			"start": start,
@@ -437,6 +462,37 @@ func Diagnose(src string) []map[string]any {
 		"source":   "gregor",
 		"message":  msg + " (Filing would be rejected pursuant to Article §4.2.)",
 	}}
+}
+
+// checkCanonImports owns fresh temporary storage. Unknown custom imports keep
+// syntax-only diagnostics; neither editor documents nor their filings persist.
+func checkCanonImports(src string, prog *gregor.Program) error {
+	ctx := context.Background()
+	log := docket.NewMemoryLog()
+	defer log.Close()
+	names := make(map[string]bool)
+	for _, file := range canon.Files() {
+		text, err := canon.FS.ReadFile(file)
+		if err != nil {
+			return fmt.Errorf("read bundled canon: %w", err)
+		}
+		name, _, err := court.Enact(ctx, log, string(text))
+		if err != nil {
+			return fmt.Errorf("enact bundled canon: %w", err)
+		}
+		names[name] = true
+	}
+	for _, inc := range prog.Incorporations {
+		if !names[inc.Name] {
+			return nil
+		}
+	}
+	if prog.Form == "S-1" {
+		_, _, err := court.Enact(ctx, log, src)
+		return err
+	}
+	_, err := court.File(ctx, log, src)
+	return err
 }
 
 // Gregor reports one-based byte columns; LSP uses zero-based UTF-16 columns.
@@ -470,7 +526,7 @@ func diagnosticRange(src string, line, column int) (position, position) {
 func (s *Server) publishDiagnostics(uri string) error {
 	return s.write(rpcResponse{Method: "textDocument/publishDiagnostics", Params: map[string]any{
 		"uri":         uri,
-		"diagnostics": Diagnose(s.docs[uri]),
+		"diagnostics": diagnose(s.docs[uri], s.Canon),
 	}})
 }
 

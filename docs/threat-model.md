@@ -88,6 +88,11 @@ Headers, header count, message length, URI length, document count, and document
 size are bounded. The server accepts one full-document change per notification.
 Unknown request methods return `-32601`.
 
+Optional `--canon` diagnostics load only embedded statutes into fresh temporary
+memory storage. They do not execute documents, retain temporary cases between
+checks, read workspace dependencies, or contact Kafka. Any unknown custom import
+keeps syntax-only checking. See [ADR 0011](adr/0011-canon-editor-diagnostics.md).
+
 Residual risk: LSP diagnostics may contain source-derived text. Editors must
 treat diagnostics as untrusted display data.
 

@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Run race-test packages sequentially so expensive example suites do not compete
+  across packages. Keep every race check and the existing test deadlines.
 - Return docket-audit errors for unreadable commencement, archive, catalog,
   attention, or motion records instead of reporting an incomplete survey as successful.
 - Avoid reconstructing final deposition state when no record or verdict-citation
@@ -84,6 +86,9 @@
 
 ### Added
 
+- Add `trial counsel --canon` to compile known bundled imports during editor
+  diagnostics, with syntax-only fallback for custom imports and honest ranges
+  for errors originating from imported declarations.
 - Add `trial check` to compile K-1 cases and S-1 statutes without execution or
   Kafka, with ordered local dependencies, the bundled canon, stdin, and a timeout.
 - Let MCP `trial_test` accept inline statute sources for deposition `ENACT`
