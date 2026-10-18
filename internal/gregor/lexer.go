@@ -2,6 +2,7 @@
 package gregor
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -61,6 +62,7 @@ type token struct {
 type RejectedFiling struct {
 	Line, Col   int
 	Particulars string
+	Source      string `json:"-"` // optional source identity; an empty value identifies the root filing
 }
 
 func (e *RejectedFiling) Error() string {
@@ -69,6 +71,17 @@ func (e *RejectedFiling) Error() string {
 
 func reject(line, col int, format string, args ...any) error {
 	return &RejectedFiling{Line: line, Col: col, Particulars: fmt.Sprintf(format, args...)}
+}
+
+// withSource annotates a newly constructed rejection without changing its text
+// or discarding any enclosing error context. An existing origin takes priority.
+func withSource(err error, source string) error {
+	if source != "" {
+		if rejection, ok := errors.AsType[*RejectedFiling](err); ok && rejection.Source == "" {
+			rejection.Source = source
+		}
+	}
+	return err
 }
 
 func lex(src string) ([]token, error) {

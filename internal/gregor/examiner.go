@@ -8,16 +8,16 @@ package gregor
 func examine(prog *Program) error {
 	for _, art := range prog.Articles {
 		if err := examineBlock(art.Stmts); err != nil {
-			return err
+			return withSource(err, art.source)
 		}
 	}
 	for _, off := range prog.Offices {
 		if err := examineBlock(off.Stmts); err != nil {
-			return err
+			return withSource(err, off.source)
 		}
 		for _, sec := range off.Sections {
 			if err := examineBlock(sec.Stmts); err != nil {
-				return err
+				return withSource(err, off.source)
 			}
 		}
 	}
