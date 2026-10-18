@@ -44,7 +44,7 @@ func Compile(prog *Program) ([]law.Instr, error) {
 	// declarations emit no instructions.
 	for _, cd := range prog.Constants {
 		if _, dup := c.constants[cd.Name]; dup {
-			return nil, reject(cd.Line, 1, "the term %q is defined more than once", cd.Name)
+			return nil, withSource(reject(cd.Line, 1, "the term %q is defined more than once", cd.Name), cd.source)
 		}
 		switch lit := cd.Expr.(type) {
 		case IntLit:
@@ -56,33 +56,33 @@ func Compile(prog *Program) ([]law.Instr, error) {
 		case FindingLit:
 			c.constants[cd.Name] = law.Finding(lit.Val)
 		default:
-			return nil, reject(cd.Line, 1, "a defined term must be a literal")
+			return nil, withSource(reject(cd.Line, 1, "a defined term must be a literal"), cd.source)
 		}
 	}
 	for _, off := range prog.Offices {
 		if _, dup := c.officeParams[off.Name]; dup {
-			return nil, reject(off.Line, 1, "the office of %s is established more than once", off.Name)
+			return nil, withSource(reject(off.Line, 1, "the office of %s is established more than once", off.Name), off.source)
 		}
 		seen := make(map[string]bool, len(off.Params))
 		for _, param := range off.Params {
 			if seen[param] {
-				return nil, reject(off.Line, 1, "the office of %s lists concern %q more than once", off.Name, param)
+				return nil, withSource(reject(off.Line, 1, "the office of %s lists concern %q more than once", off.Name, param), off.source)
 			}
 			seen[param] = true
 			if _, isConst := c.constants[param]; isConst {
-				return nil, reject(off.Line, 1, "the office of %s uses defined term %q as a concern", off.Name, param)
+				return nil, withSource(reject(off.Line, 1, "the office of %s uses defined term %q as a concern", off.Name, param), off.source)
 			}
 		}
 		c.officeParams[off.Name] = off.Params
 	}
 	for _, ex := range prog.Exhibits {
 		if _, dup := c.exhibitFields[ex.Name]; dup {
-			return nil, reject(ex.Line, 1, "the exhibit of %s is established more than once", ex.Name)
+			return nil, withSource(reject(ex.Line, 1, "the exhibit of %s is established more than once", ex.Name), ex.source)
 		}
 		seen := map[string]bool{}
 		for _, f := range ex.Fields {
 			if seen[f] {
-				return nil, reject(ex.Line, 1, "the exhibit of %s lists entry %q more than once", ex.Name, f)
+				return nil, withSource(reject(ex.Line, 1, "the exhibit of %s lists entry %q more than once", ex.Name, f), ex.source)
 			}
 			seen[f] = true
 		}
@@ -93,12 +93,12 @@ func Compile(prog *Program) ([]law.Instr, error) {
 	articleAt := make(map[int64]int64)
 	for _, art := range prog.Articles {
 		if _, dup := articleAt[art.Number]; dup {
-			return nil, reject(art.Line, 1, "ARTICLE %d appears more than once", art.Number)
+			return nil, withSource(reject(art.Line, 1, "ARTICLE %d appears more than once", art.Number), art.source)
 		}
 		articleAt[art.Number] = int64(len(c.instrs))
 		for _, s := range art.Stmts {
-			if err := c.genStmt(s, scope{articles: articleAt, inOffice: false}); err != nil {
-				return nil, err
+			if err := c.genStmt(s, scope{articles: articleAt, inOffice: false, source: art.source}); err != nil {
+				return nil, withSource(err, art.source)
 			}
 		}
 	}
@@ -117,20 +117,20 @@ func Compile(prog *Program) ([]law.Instr, error) {
 		// Section addresses must be known before the office body is
 		// generated (a body statement may refer forward to a section),
 		// so section jumps go through the patch list like everything else.
-		sc := scope{sections: sectionAt, inOffice: true, params: off.Params}
+		sc := scope{sections: sectionAt, inOffice: true, params: off.Params, source: off.source}
 		for _, s := range off.Stmts {
 			if err := c.genStmt(s, sc); err != nil {
-				return nil, err
+				return nil, withSource(err, off.source)
 			}
 		}
 		for _, sec := range off.Sections {
 			if _, dup := sectionAt[sec.Number]; dup {
-				return nil, reject(sec.Line, 1, "SECTION %d appears twice within the office of %s", sec.Number, off.Name)
+				return nil, withSource(reject(sec.Line, 1, "SECTION %d appears twice within the office of %s", sec.Number, off.Name), off.source)
 			}
 			sectionAt[sec.Number] = int64(len(c.instrs))
 			for _, s := range sec.Stmts {
 				if err := c.genStmt(s, sc); err != nil {
-					return nil, err
+					return nil, withSource(err, off.source)
 				}
 			}
 		}
@@ -139,7 +139,7 @@ func Compile(prog *Program) ([]law.Instr, error) {
 		for _, pt := range c.sectionPatches {
 			target, ok := sectionAt[pt.number]
 			if !ok {
-				return nil, reject(pt.line, 1, "the office of %s contains no SECTION %d", off.Name, pt.number)
+				return nil, withSource(reject(pt.line, 1, "the office of %s contains no SECTION %d", off.Name, pt.number), pt.source)
 			}
 			c.instrs[pt.at].Target = target
 		}
@@ -153,14 +153,14 @@ func Compile(prog *Program) ([]law.Instr, error) {
 	for _, pt := range c.articlePatches {
 		target, ok := articleAt[pt.number]
 		if !ok {
-			return nil, reject(pt.line, 1, "the case contains no ARTICLE %d", pt.number)
+			return nil, withSource(reject(pt.line, 1, "the case contains no ARTICLE %d", pt.number), pt.source)
 		}
 		c.instrs[pt.at].Target = target
 	}
 	for _, pt := range c.petitionPatches {
 		target, ok := c.officeEntry[pt.name]
 		if !ok {
-			return nil, reject(pt.line, 1, "the office of %s is not defined", pt.name)
+			return nil, withSource(reject(pt.line, 1, "the office of %s is not defined", pt.name), pt.source)
 		}
 		c.instrs[pt.at].Target = target
 	}
@@ -168,6 +168,7 @@ func Compile(prog *Program) ([]law.Instr, error) {
 }
 
 type scope struct {
+	source   string
 	articles map[int64]int64
 	sections map[int64]int64
 	params   []string
@@ -175,6 +176,7 @@ type scope struct {
 }
 
 type patch struct {
+	source string
 	at     int64
 	number int64
 	name   string
@@ -295,9 +297,9 @@ func (c *codegen) genStmt(s Stmt, sc scope) error {
 		}
 		at := c.emit(law.Instr{Op: law.OpRefer, Pos: pos(st.Line)})
 		if st.ToSection {
-			c.sectionPatches = append(c.sectionPatches, patch{at: at, number: st.Number, line: st.Line})
+			c.sectionPatches = append(c.sectionPatches, patch{at: at, number: st.Number, line: st.Line, source: sc.source})
 		} else {
-			c.articlePatches = append(c.articlePatches, patch{at: at, number: st.Number, line: st.Line})
+			c.articlePatches = append(c.articlePatches, patch{at: at, number: st.Number, line: st.Line, source: sc.source})
 		}
 		return nil
 
@@ -310,7 +312,7 @@ func (c *codegen) genStmt(s Stmt, sc scope) error {
 			return reject(st.Line, 1, "the grounds cannot overwrite defined term %q", st.Grounds)
 		}
 		at := c.emit(law.Instr{Op: law.OpMotion, Name: st.Grounds, Pos: pos(st.Line)})
-		c.articlePatches = append(c.articlePatches, patch{at: at, number: st.Article, line: st.Line})
+		c.articlePatches = append(c.articlePatches, patch{at: at, number: st.Article, line: st.Line, source: sc.source})
 		return nil
 
 	case Conditional:
@@ -598,7 +600,7 @@ func (c *codegen) genExpr(e Expr, sc scope) error {
 			return reject(ex.Line, 1, "the office of %s is not defined", ex.Office)
 		}
 		at := c.emit(law.Instr{Op: law.OpPower, Name: ex.Office, Params: params, Pos: pos(ex.Line)})
-		c.petitionPatches = append(c.petitionPatches, patch{at: at, name: ex.Office, line: ex.Line})
+		c.petitionPatches = append(c.petitionPatches, patch{at: at, name: ex.Office, line: ex.Line, source: sc.source})
 	case ExhibitLit:
 		declared, known := c.exhibitFields[ex.Of]
 		if !known {
@@ -751,7 +753,7 @@ func (c *codegen) genCall(office string, args []Expr, wants bool, line int, sc s
 		}
 	}
 	at := c.emit(law.Instr{Op: law.OpPetition, Name: office, Params: params, Wants: wants, Pos: pos(line)})
-	c.petitionPatches = append(c.petitionPatches, patch{at: at, name: office, line: line})
+	c.petitionPatches = append(c.petitionPatches, patch{at: at, name: office, line: line, source: sc.source})
 	return nil
 }
 

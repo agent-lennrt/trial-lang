@@ -4,6 +4,12 @@
 
 ### Fixed
 
+- Run race-test packages sequentially so expensive example suites do not compete
+  across packages. Keep every race check and the existing test deadlines.
+- Return docket-audit errors for unreadable commencement, archive, catalog,
+  attention, or motion records instead of reporting an incomplete survey as successful.
+- Avoid reconstructing final deposition state when no record or verdict-citation
+  assertion needs it. Keep exact output, outcome, and requested state checks.
 - Compute fixed-point products, divisions, remainders, and mixed comparisons
   without overflowing intermediate values. Preserve final signed 64-bit wrapping.
 - Flush pending effects before expedited discovery and standing reads, so they
@@ -58,6 +64,10 @@
 
 ### Changed
 
+- Pin development, CI, and release builds to Go 1.27.2 to include the standard
+  library security fixes reported by the repository's vulnerability scan.
+- Update golangci-lint to v2.15.0 so verification can read Go 1.27.2 export data,
+  and retain canceled-fetch errors in storage-test failure diagnostics.
 - Reconcile the grammar, bytecode reference, and language specification with
   implemented forms, operand evaluation order, fixed-point arithmetic, and record behavior.
 - Explain local execution, deposition assertions, example dependencies, and
@@ -76,6 +86,17 @@
 
 ### Added
 
+- Add `trial counsel --canon` to compile known bundled imports during editor
+  diagnostics, and repeated `--enact` paths for custom statutes. Track source
+  ownership for accurate cross-file ranges, refresh imports from open dependency
+  buffers, reload configured files on close, and clear stale diagnostics.
+- Add `trial check` to compile K-1 cases and S-1 statutes without execution or
+  Kafka, with ordered local dependencies, the bundled canon, stdin, and a timeout.
+- Let MCP `trial_test` accept inline statute sources for deposition `ENACT`
+  entries, so imported programs can be tested without filesystem or broker access.
+- Add `trial mcp --local` for temporary in-memory authoring sessions without
+  Kafka. Tell clients that session state disappears on exit and reject an
+  explicitly conflicting broker flag.
 - Add `trial run` for bounded brokerless source execution, repeated inputs and
   statute dependencies, streamed main-case output, and joined child workers.
 - Add computed Julia, wave-interference, and distance-field shaders with exact

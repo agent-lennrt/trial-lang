@@ -104,13 +104,13 @@ func TestMemoryDeleteWakesWaitingFetch(t *testing.T) {
 	case <-waiting:
 	case <-time.After(5 * time.Second):
 		cancel()
-		<-done
-		t.Fatal("Fetch did not start waiting")
+		fetchErr := <-done
+		t.Fatalf("Fetch did not start waiting; cancellation returned %v", fetchErr)
 	}
 	if err := m.DeleteCaseTopics(context.Background(), c); err != nil {
 		cancel()
-		<-done
-		t.Fatal(err)
+		fetchErr := <-done
+		t.Fatalf("delete case topics: %v; Fetch cancellation returned %v", err, fetchErr)
 	}
 	select {
 	case err := <-done:
@@ -119,8 +119,8 @@ func TestMemoryDeleteWakesWaitingFetch(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		cancel()
-		<-done
-		t.Fatal("deleting the case left Fetch blocked")
+		fetchErr := <-done
+		t.Fatalf("deleting the case left Fetch blocked; cancellation returned %v", fetchErr)
 	}
 }
 

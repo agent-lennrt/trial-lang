@@ -73,8 +73,47 @@ to that line's end.
 - **VS Code / others**: point any generic LSP client at the command
   `trial counsel` for the language id `trial`.
 
-Filings that `INCORPORATE BY REFERENCE` receive parse-level diagnostics only,
-because the language server does not fetch enactments.
+By default, filings that `INCORPORATE BY REFERENCE` receive syntax-only
+diagnostics. Use `trial counsel --canon` to compile documents whose imports all
+come from the bundled canon. In Neovim, change the command above to
+`cmd = { "trial", "counsel", "--canon" }`.
+
+Canon mode resolves transitive imports and catches errors such as a missing
+article, a wrong number of arguments, or a duplicate office. With only `--canon`,
+a custom or unknown import keeps the whole document on syntax-only checks.
+
+For custom statutes, supply each file explicitly, with dependencies first:
+
+```lua
+cmd = { "trial", "counsel", "--canon",
+  "--enact", "/path/to/project/statutes/base.trial",
+  "--enact", "/path/to/project/statutes/project.trial" }
+```
+
+Once `--enact` is supplied, missing imports and invalid dependency text are
+errors. Relative paths use the server's working directory. The limit is 100
+distinct paths, 4 MiB per file, and 256 MiB total. Standard input (`-`) cannot be
+a statute path because it carries LSP messages.
+
+Open buffers for configured files override their saved contents. Edits refresh
+diagnostics in importing documents; closing a configured buffer reloads its
+saved file. Restart the server after external changes to closed files. File URI
+escaping is normalized, and Windows paths match without regard to case. Symlinks
+are not resolved; opening a second URI alias for one configured file is rejected
+until the first closes. Unconfigured buffers never supply imports.
+
+Errors appear at the source file and UTF-16 range that owns the rejection, with
+related importing locations when available. Bundled source locations use
+`trial-canon:///` virtual URIs, which an editor may display without opening;
+a contextual diagnostic also appears in the importing document.
+Fixed diagnostics clear across files, and closing one importer does not clear
+errors still needed by another. Versioned diagnostics follow accepted edits;
+out-of-order changes are ignored.
+
+Counsel reads only configured files, never discovers paths from import names,
+never contacts Kafka, and never executes documents. See the
+[interface contract](../docs/interfaces.md#counsel-lsp) for error and lifecycle
+details.
 
 ## Docket view: `trial watch`
 

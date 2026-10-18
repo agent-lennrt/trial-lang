@@ -1,5 +1,5 @@
-GO_VERSION := 1.27.0
-GOLANGCI_LINT_VERSION := v2.13.2
+GO_VERSION := 1.27.2
+GOLANGCI_LINT_VERSION := v2.15.0
 GOIMPORTS_VERSION := v0.49.0
 GOVULNCHECK_VERSION := v1.7.0
 GO_LICENSES_VERSION := v2.0.1
@@ -22,7 +22,7 @@ test:
 	go test -timeout=3m ./...
 
 race:
-	go test -race -timeout=10m ./...
+	go test -p 1 -race -timeout=10m ./...
 
 property:
 	go test -timeout=3m ./internal/court -run '^TestGeneratedPrograms' -count=1

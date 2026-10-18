@@ -17,7 +17,7 @@ The repository owner controls every release.
 
 ## Prepare the tag
 
-Run the local gates with Go 1.27.0:
+Run the local gates with Go 1.27.2:
 
 ```console
 make verify

@@ -116,8 +116,8 @@ func Enact(ctx context.Context, log docket.Log, src string) (string, int, error)
 func incorporate(ctx context.Context, log docket.Log, prog *gregor.Program) ([]*enactment, error) {
 	var pinned []*enactment
 	seen := make(map[string]bool)
-	var splice func(incs []gregor.Incorporation) error
-	splice = func(incs []gregor.Incorporation) error {
+	var splice func(incs []gregor.Incorporation, source string) error
+	splice = func(incs []gregor.Incorporation, source string) error {
 		for _, inc := range incs {
 			if seen[inc.Name] {
 				continue
@@ -125,13 +125,13 @@ func incorporate(ctx context.Context, log docket.Log, prog *gregor.Program) ([]*
 			seen[inc.Name] = true
 			e, err := latestEnactment(ctx, log, inc.Name)
 			if err != nil {
-				return &gregor.RejectedFiling{Line: inc.Line, Col: 1, Particulars: err.Error()}
+				return &gregor.RejectedFiling{Line: inc.Line, Col: 1, Particulars: err.Error(), Source: source}
 			}
-			sProg, err := gregor.Parse(e.Source)
+			sProg, err := gregor.ParseSource(e.Source, inc.Name)
 			if err != nil {
 				return fmt.Errorf("the statute %q no longer parses, which is a matter for the legislature: %w", inc.Name, err)
 			}
-			if err := splice(sProg.Incorporations); err != nil {
+			if err := splice(sProg.Incorporations, inc.Name); err != nil {
 				return err
 			}
 			prog.Offices = append(prog.Offices, sProg.Offices...)
@@ -143,10 +143,33 @@ func incorporate(ctx context.Context, log docket.Log, prog *gregor.Program) ([]*
 		}
 		return nil
 	}
-	if err := splice(prog.Incorporations); err != nil {
+	if err := splice(prog.Incorporations, prog.Source); err != nil {
 		return nil, err
 	}
 	return pinned, nil
+}
+
+// Check validates a K-1 case or S-1 statute against the current enactments.
+// It reads dependencies but neither publishes source nor writes case records.
+func Check(ctx context.Context, log docket.Log, src string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	prog, err := gregor.Parse(src)
+	if err != nil {
+		return err
+	}
+	if prog.Form != "K-1" && prog.Form != "S-1" {
+		return errors.New("expected a Form K-1 case or Form S-1 statute")
+	}
+	_, err = incorporate(ctx, log, prog)
+	if err == nil {
+		_, err = gregor.Compile(prog)
+	}
+	if cancelled := ctx.Err(); cancelled != nil {
+		return cancelled
+	}
+	return err
 }
 
 // File opens a case: parses and compiles the source, creates the

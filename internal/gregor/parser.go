@@ -13,12 +13,36 @@ type parser struct {
 
 // Parse reads a complete case file. Errors are *RejectedFiling.
 func Parse(src string) (*Program, error) {
+	return ParseSource(src, "")
+}
+
+// ParseSource parses source with an optional identity for diagnostics. Every
+// nested statement or expression belongs to its enclosing article or office.
+// Source identity never changes source positions or emitted instructions.
+func ParseSource(src, source string) (*Program, error) {
 	toks, err := lex(src)
 	if err != nil {
-		return nil, err
+		return nil, withSource(err, source)
 	}
 	p := &parser{toks: toks}
-	return p.parseCaseFile()
+	prog, err := p.parseCaseFile()
+	if err != nil {
+		return nil, withSource(err, source)
+	}
+	prog.Source = source
+	for i := range prog.Constants {
+		prog.Constants[i].source = source
+	}
+	for i := range prog.Exhibits {
+		prog.Exhibits[i].source = source
+	}
+	for i := range prog.Articles {
+		prog.Articles[i].source = source
+	}
+	for i := range prog.Offices {
+		prog.Offices[i].source = source
+	}
+	return prog, nil
 }
 
 func (p *parser) peek() token { return p.toks[p.pos] }

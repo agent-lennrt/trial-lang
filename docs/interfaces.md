@@ -10,7 +10,7 @@ examples. The versioned reference is [cmd/trial/help.go](../cmd/trial/help.go).
 
 `trial <command> [flags]` accepts paths, case identifiers, and values described
 by that command. A filing path of `-` reads standard input. Kafka commands use
-`--broker`, then `TRIAL_BROKER`, then `localhost:9092`. `run` and `test` use an
+`--broker`, then `TRIAL_BROKER`, then `localhost:9092`. `check`, `run`, and `test` use an
 in-memory adapter. `summon` and `dismiss` operate the Compose project in the checkout.
 
 Normal command results go to stdout and errors go to stderr. Exit codes are
@@ -38,6 +38,31 @@ second signal can force exit. `summon` waits up to 120 seconds for the
 Compose broker to report healthy. `trial help` documents `--broker` only for
 commands that connect to Kafka; the list is derived from the command table in
 [cmd/trial/commands.go](../cmd/trial/commands.go).
+
+### Local validation
+
+`trial check <source.trial>` parses and compiles a Form K-1 case or Form S-1
+statute without executing it. It resolves imports in temporary memory storage
+using the same filing and enactment rules as the broker workflow.
+
+```console
+go run ./cmd/trial check examples/hello.trial
+go run ./cmd/trial check --canon examples/the-wave-chamber.trial
+go run ./cmd/trial check examples/incorporation.trial --enact examples/the-statutes-of-arithmetic.trial
+```
+
+Use `--canon`, repeated `--enact`, and `--timeout` with the same ordering, source
+bounds, path rules, and cancellation grace as [local execution](#local-execution).
+The default timeout is 30 seconds. Use `-` for at most one source from stdin.
+Form K-2 requires an existing case and is rejected by this command.
+
+Status 0 prints `Source accepted.` and a newline on stdout. Source, compilation,
+output, timeout, and cancellation failures return status 1 with diagnostics on
+stderr. Invalid arguments return status 2. No case or statute is persisted.
+
+A successful check does not prove runtime success or termination. Input waits,
+loops, and runtime-only errors can remain in accepted source. Run the program
+or a deposition to test execution. See [ADR 0009](adr/0009-compile-only-local-check.md).
 
 ### Local execution
 
@@ -104,6 +129,20 @@ the matching response; notifications receive none. The server also supports
 `ping`. The complete tool schemas and result construction are in
 [internal/advocate/advocate.go](../internal/advocate/advocate.go).
 
+By default, `trial mcp` connects to Kafka before serving requests. Use
+`trial mcp --local` to start without a broker. Local mode uses one fresh memory
+log for all session tools and exposes the same schemas and results. The
+initialization instructions identify its temporary storage. All cases, statutes,
+and records disappear when the process exits; case numbers cannot resume work
+in a new process. `trial_test` remains isolated from the session log.
+
+Local mode ignores `TRIAL_BROKER`. Combining active `--local` with an explicit
+`--broker` option is an argument error. EOF ends the session normally, and
+signals use the CLI cancellation behavior above. `trial_proceed` executes only
+the named case; local mode does not add background docket workers. Per-call
+limits do not impose a total session-memory bound or make local mode a security
+sandbox. See [ADR 0010](adr/0010-local-mcp-sessions.md).
+
 | Tools | Inputs and results |
 | --- | --- |
 | `trial_file`, `trial_enact`, `trial_amend` | Source text, plus a case for amendment; create a case, statute version, or supplemental filing. |
@@ -111,7 +150,7 @@ the matching response; notifications receive none. The server also supports
 | `trial_observe`, `trial_status`, `trial_docket` | Optional offset/limit and a case where applicable; return bounded pages of output, status, or cases. |
 | `trial_verdict`, `trial_reenact` | Case; read its verdict or append replay-reset markers. |
 | `trial_statutes` | No arguments; list available statute names. |
-| `trial_test` | Program and deposition source; return results from an isolated in-memory run. |
+| `trial_test` | Program and deposition source, plus optional inline `enactments`; return results from an isolated in-memory run. |
 
 Tool results use `content` entries of type `text`; failed tools set `isError`.
 Protocol errors use JSON-RPC `error` objects. Unknown arguments are rejected.
@@ -131,6 +170,17 @@ The message limit excludes LF or CRLF framing and accepts a final line at EOF.
 A short stdout write fails the session. See
 [ADR 0006](adr/0006-protocol-input-contracts.md) for both protocol contracts.
 
+For `trial_test`, `enactments` is an optional object mapping each exact `ENACT`
+label to its statute source. Labels are lookup keys, even when they look like
+paths; the tool does not read files or the server's log. Sources are enacted in
+deposition order. Repeated labels use the same source at each declaration.
+Missing or unused keys, null or non-string values, more than 100 entries, sources
+over 4 MiB, or an expanded sequence over 256 MiB fail before execution. Repeated
+declarations count toward the sequence bound. The complete JSON request must
+also fit the 16 MiB message limit. Invalid statute syntax produces an ordinary
+inconsistent deposition result. See the [inline example](depositions.md#test-inline-statutes-through-mcp)
+and [ADR 0008](adr/0008-mcp-deposition-dependencies.md).
+
 ## Counsel LSP
 
 `trial counsel` uses standard I/O and Content-Length framing: ASCII headers,
@@ -145,6 +195,52 @@ It handles `initialize`, `shutdown`, `exit`, `textDocument/didOpen`,
 `textDocument/completion`. Requests return JSON-RPC responses; document
 notifications can publish diagnostics. Changes contain one complete document.
 Unsupported request methods return `-32601`.
+
+By default, documents with `INCORPORATE BY REFERENCE` receive syntax-only
+diagnostics. Start `trial counsel --canon` to also compile documents whose
+imports all name bundled statutes, including their transitive dependencies.
+With only `--canon`, an unknown import keeps syntax-only checks.
+
+Use repeated `--enact <path>` options to supply custom statutes in dependency
+order. Add `--canon` to load bundled statutes first:
+
+```console
+trial counsel --canon --enact ./statutes/base.trial --enact ./statutes/project.trial
+```
+
+Explicit sources define the complete import context: missing imports and invalid
+statutes produce diagnostics. The command reads up to 100 distinct paths, 4 MiB
+per file, and 256 MiB total. Missing or unreadable files fail startup. `-` is
+rejected because standard input carries the protocol. Duplicate normalized paths
+are rejected. Distinct files may enact the same statute name; the last successful
+enactment supplies imports. Invalid inputs remain diagnosed even if an earlier
+version is available.
+Relative paths resolve against the server's working directory.
+
+An open document whose URI matches a configured file overrides that file's text.
+Dependency edits refresh open documents. Closing the configured document rereads
+its saved file and refreshes diagnostics; a failed reread is reported instead of
+silently using stale text. External changes to closed files require restarting
+the server. Open unconfigured statutes do not enter the import context. File URI
+escaping and lexical paths are normalized; Windows paths match without regard
+to case. Symlinks are not resolved. A configured file cannot be open under two
+URI aliases at once.
+
+Compiler diagnostics carry source ownership. Errors in custom statutes appear
+at the actual file and UTF-16 range; errors in bundled sources use stable
+`trial-canon:///` virtual URIs. Related information identifies importing locations
+when available. Editors may display these virtual locations without being able
+to open their text, so bundled-source failures also produce a contextual
+diagnostic in the importing document. Configured sources are validated on every
+refresh. Closing
+one importer does not clear errors required by another. Fixed or obsolete
+diagnostics are cleared. Versioned document diagnostics identify the accepted
+version; stale changes are ignored.
+See [ADR 0012](adr/0012-custom-statute-editor-diagnostics.md).
+
+Counsel reads only explicitly configured files. It does not discover dependencies
+from imports or arbitrary document URIs, contact a broker, or execute documents.
+Temporary validation state is discarded between refreshes.
 
 Malformed JSON returns `-32700`; valid JSON with an invalid request envelope
 returns `-32600`. An envelope must have `jsonrpc: "2.0"` and a nonempty method.

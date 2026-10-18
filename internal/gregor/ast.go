@@ -3,6 +3,7 @@ package gregor
 // This file defines the parser's abstract syntax tree.
 
 type Program struct {
+	Source         string `json:"-"` // optional source identity; never part of emitted instructions
 	Form           string // "K-1" (a case), "K-2" (a supplemental filing), or "S-1" (a statute)
 	Name           string
 	Incorporations []Incorporation
@@ -18,24 +19,28 @@ type Incorporation struct { // INCORPORATE BY REFERENCE name.
 }
 
 type ConstDecl struct { // HEREINAFTER, name SHALL MEAN literal.
-	Name string
-	Expr Expr // an IntLit, SumLit, StrLit, or FindingLit; nothing else may be meant
-	Line int
+	source string
+	Name   string
+	Expr   Expr // an IntLit, SumLit, StrLit, or FindingLit; nothing else may be meant
+	Line   int
 }
 
 type ExhibitDecl struct { // THE EXHIBIT OF name, COMPRISING f AND g.
+	source string
 	Name   string
 	Fields []string
 	Line   int
 }
 
 type Article struct {
+	source string
 	Number int64
 	Stmts  []Stmt
 	Line   int
 }
 
 type Office struct {
+	source   string
 	Name     string
 	Params   []string
 	Stmts    []Stmt

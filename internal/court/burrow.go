@@ -5,6 +5,7 @@ package court
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/lennrt/trial-lang/internal/docket"
 	"github.com/lennrt/trial-lang/internal/law"
@@ -34,6 +35,7 @@ func (b *Burrow) Consistent() bool {
 }
 
 // SurveyBurrow audits every case on the docket without writing to the log.
+// A failed observation returns an error rather than an incomplete report.
 func SurveyBurrow(ctx context.Context, log docket.Log) (*Burrow, error) {
 	cases, err := log.ListCases(ctx)
 	if err != nil {
@@ -46,7 +48,7 @@ func SurveyBurrow(ctx context.Context, log docket.Log) (*Burrow, error) {
 	for _, c := range cases {
 		recs, err := log.ReadAll(ctx, c.Ledger())
 		if err != nil {
-			continue // a case file with no ledger is a case with no draws; nothing to learn
+			return nil, fmt.Errorf("read commencement ledger for %s: %w", c.ID, err)
 		}
 		for _, r := range recs {
 			var ev ledgerEvent
@@ -71,15 +73,19 @@ func SurveyBurrow(ctx context.Context, log docket.Log) (*Burrow, error) {
 
 		// The archive's drafts: offsets no catalog entry ever named.
 		archive, err := log.ReadAll(ctx, c.Archive())
-		if err == nil && len(archive) > 0 {
+		if err != nil {
+			return nil, fmt.Errorf("read archive for %s: %w", c.ID, err)
+		}
+		if len(archive) > 0 {
 			cataloged := map[int64]bool{}
 			catalog, err := log.ReadAll(ctx, c.Catalog())
-			if err == nil {
-				for _, r := range catalog {
-					var e catalogEntry
-					if json.Unmarshal(r.Value, &e) == nil {
-						cataloged[e.Offset] = true
-					}
+			if err != nil {
+				return nil, fmt.Errorf("read catalog for %s: %w", c.ID, err)
+			}
+			for _, r := range catalog {
+				var e catalogEntry
+				if json.Unmarshal(r.Value, &e) == nil {
+					cataloged[e.Offset] = true
 				}
 			}
 			for _, r := range archive {
@@ -91,31 +97,35 @@ func SurveyBurrow(ctx context.Context, log docket.Log) (*Burrow, error) {
 
 		// The unconvened and uncommenced.
 		att, err := log.Attention(ctx, c)
-		if err == nil && !att.Started && !commenced[c.ID] {
+		if err != nil {
+			return nil, fmt.Errorf("read attention for %s: %w", c.ID, err)
+		}
+		if !att.Started && !commenced[c.ID] {
 			b.Unconvened = append(b.Unconvened, c.ID)
 		}
 
 		// The spent motions, folded the way Recover folds them: the
 		// last writing wins, and a tombstone is a withdrawal.
 		records, err := log.ReadAll(ctx, c.Records())
-		if err == nil {
-			var m *motion
-			for _, r := range records {
-				if string(r.Key) != MotionKey {
-					continue
-				}
-				if len(r.Value) == 0 {
-					m = nil
-					continue
-				}
-				var got motion
-				if json.Unmarshal(r.Value, &got) == nil {
-					m = &got
-				}
+		if err != nil {
+			return nil, fmt.Errorf("read motion records for %s: %w", c.ID, err)
+		}
+		var m *motion
+		for _, r := range records {
+			if string(r.Key) != MotionKey {
+				continue
 			}
-			if m != nil && m.Spent {
-				b.SpentMotions = append(b.SpentMotions, c.ID)
+			if len(r.Value) == 0 {
+				m = nil
+				continue
 			}
+			var got motion
+			if json.Unmarshal(r.Value, &got) == nil {
+				m = &got
+			}
+		}
+		if m != nil && m.Spent {
+			b.SpentMotions = append(b.SpentMotions, c.ID)
 		}
 	}
 	return b, nil

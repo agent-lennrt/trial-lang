@@ -1576,15 +1576,32 @@ func auditDocket(ctx context.Context, log *docket.KafkaLog) int {
 func mcpCmd(ctx context.Context, rest []string) int {
 	fs := commandFlags("mcp")
 	broker := fs.String("broker", brokerDefault(), "Kafka broker address")
+	local := fs.Bool("local", false, "use temporary in-memory storage without Kafka")
 	if err := fs.Parse(rest); err != nil {
 		return 2
 	}
 	if unexpectedArgs("mcp", fs.Args()) {
 		return 2
 	}
-	log, code := openLog(ctx, *broker)
-	if log == nil {
-		return code
+	var explicitBroker bool
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "broker" {
+			explicitBroker = true
+		}
+	})
+	if *local && explicitBroker {
+		fmt.Fprintln(os.Stderr, "trial mcp: --local and --broker cannot be combined.")
+		return 2
+	}
+	var log docket.Log
+	if *local {
+		log = docket.NewMemoryLog()
+	} else {
+		remote, code := openLog(ctx, *broker)
+		if remote == nil {
+			return code
+		}
+		log = remote
 	}
 	defer log.Close()
 
@@ -1592,6 +1609,7 @@ func mcpCmd(ctx context.Context, rest []string) int {
 	input, closeInput := commandInput(ctx)
 	defer closeInput()
 	srv := newAdvocateServer(log, input, os.Stdout)
+	srv.Local = *local
 	if err := srv.Serve(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "MCP server stopped: %v\n", err)
 		return 1
@@ -1610,16 +1628,43 @@ func newAdvocateServer(log docket.Log, in io.Reader, out io.Writer) *advocate.Se
 
 func counselCmd(ctx context.Context, rest []string) int {
 	fs := commandFlags("counsel")
+	useCanon := fs.Bool("canon", false, "check imports resolved entirely from the bundled canon")
+	var files []counselFile
+	seen := make(map[string]bool)
+	fs.Func("enact", "statute path for editor diagnostics; repeat in dependency order", func(path string) error {
+		if len(files) >= maxRunEnactments {
+			return fmt.Errorf("at most %d statutes may be configured", maxRunEnactments)
+		}
+		file, err := normalizeCounselFile(path)
+		if err != nil {
+			return err
+		}
+		key := counselPathKey(file.path)
+		if seen[key] {
+			return fmt.Errorf("statute path %q is configured more than once", path)
+		}
+		seen[key] = true
+		files = append(files, file)
+		return nil
+	})
 	if err := fs.Parse(rest); err != nil {
 		return 2
 	}
 	if unexpectedArgs("counsel", fs.Args()) {
 		return 2
 	}
+	sources, reload, err := loadCounselSources(ctx, files, docket.MaxReadBytes)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "trial counsel: %v\n", err)
+		return 1
+	}
 	fmt.Fprintln(os.Stderr, "trial LSP server listening on stdio")
 	input, closeInput := commandInput(ctx)
 	defer closeInput()
-	srv := &counsel.Server{In: input, Out: os.Stdout, Version: resolveVersion()}
+	srv := &counsel.Server{
+		In: input, Out: os.Stdout, Version: resolveVersion(), Canon: *useCanon,
+		Enactments: sources, ReloadSource: reload,
+	}
 	if err := srv.Serve(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "LSP server stopped: %v\n", err)
 		return 1

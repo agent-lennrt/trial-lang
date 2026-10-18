@@ -1903,6 +1903,8 @@ case on file and reports additional docket-wide state:
   been granted and cannot be granted again.
 
 None of these are inconsistencies. The survey deletes and writes nothing.
+If a case audit or residual-state read fails, the docket audit returns an
+error. It does not report an incomplete survey as successful.
 
 ### 14.6 Appeal
 

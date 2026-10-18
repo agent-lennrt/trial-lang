@@ -102,6 +102,33 @@ The Go loader replaces loaded sources after every file succeeds. Repeating a
 load does not append duplicates. A failed load preserves the previous source
 list. Do not execute after a loading error. Fix the path and load again.
 
+### Test inline statutes through MCP
+
+The Advocate's `trial_test` tool accepts an optional `enactments` object. Map each
+exact `ENACT` label to its inline source. For example, these tool arguments test
+an imported office without reading files or using broker state:
+
+```json
+{
+  "program_source": "FORM K-1. IN THE MATTER OF: example. INCORPORATE BY REFERENCE doubling. ARTICLE 1. PROCLAIM THE FINDING OF twice REGARDING 21. ADJOURN INDEFINITELY.",
+  "deposition_source": "DEPOSITION OF: example.trial.\nENACT: doubling.trial.\nEXPECT PROCLAMATION: 42.\nEXPECT ADJOURNMENT.",
+  "enactments": {
+    "doubling.trial": "FORM S-1. IN THE MATTER OF: doubling. THE OFFICE OF twice, CONCERNING n. REMAND WITH n TIMES 2."
+  }
+}
+```
+
+For this tool, `DEPOSITION OF` identifies the supplied program, and `ENACT`
+labels are exact lookup keys rather than paths. Put dependencies before their
+importers in the deposition; JSON object order does not control enactment.
+Repeated labels enact the same supplied source again. Supply every declared
+label and no unused keys. Null and non-string sources fail; an explicit empty
+string reaches the statute parser and fails as a deposition contradiction.
+
+The mapping allows at most 100 entries and 4 MiB per source. The full declaration
+sequence, counting repeated sources, allows at most 256 MiB. The complete JSON
+request also has a 16 MiB limit. See the [MCP contract](interfaces.md#advocate-mcp).
+
 ## Limits and timing
 
 The default allowance is 15 court days. One court day is one second. The

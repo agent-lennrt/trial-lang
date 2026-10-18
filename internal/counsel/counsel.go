@@ -13,17 +13,22 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
-
-	"github.com/lennrt/trial-lang/internal/gregor"
 )
 
 // Server processes one editor connection. The caller owns In and Out.
 type Server struct {
-	In      io.Reader
-	Out     io.Writer
-	Version string
+	In           io.Reader
+	Out          io.Writer
+	Version      string
+	Canon        bool                             // Check imports that resolve entirely from the bundled canon.
+	Enactments   []Source                         // Ordered, explicitly configured statute snapshots.
+	ReloadSource func(uri string) (string, error) // Optional allowlisted reload on close.
 
-	docs map[string]string // uri -> current text
+	docs         map[string]string // uri -> current text
+	versions     map[string]*int64
+	published    map[string]bool
+	reloadErrors map[string]error
+	ctx          context.Context
 }
 
 // --- JSON-RPC / LSP plumbing -------------------------------------------
@@ -163,6 +168,10 @@ func readMessage(r *bufio.Reader) ([]byte, error) {
 // Serve reads requests until In closes, the client says exit, or ctx
 // is cancelled.
 func (s *Server) Serve(ctx context.Context) error {
+	if err := s.validateSources(); err != nil {
+		return err
+	}
+	s.ctx = ctx
 	if s.docs == nil {
 		s.docs = make(map[string]string)
 	}
@@ -242,7 +251,7 @@ func (s *Server) handle(req *rpcRequest) error {
 			TextDocument struct {
 				URI        string  `json:"uri"`
 				LanguageID string  `json:"languageId"`
-				Version    int64   `json:"version"`
+				Version    *int64  `json:"version"`
 				Text       *string `json:"text"`
 			} `json:"textDocument"`
 		}
@@ -255,13 +264,14 @@ func (s *Server) handle(req *rpcRequest) error {
 		if err := s.storeDocument(p.TextDocument.URI, *p.TextDocument.Text, false); err != nil {
 			return s.publishInputError(p.TextDocument.URI, err)
 		}
+		s.setVersion(p.TextDocument.URI, p.TextDocument.Version)
 		return s.publishDiagnostics(p.TextDocument.URI)
 
 	case "textDocument/didChange":
 		var p struct {
 			TextDocument struct {
 				URI     string `json:"uri"`
-				Version int64  `json:"version"`
+				Version *int64 `json:"version"`
 			} `json:"textDocument"`
 			ContentChanges []struct {
 				Text *string `json:"text"`
@@ -276,9 +286,13 @@ func (s *Server) handle(req *rpcRequest) error {
 		if p.ContentChanges[0].Text == nil {
 			return s.invalidParams(req, errors.New("document text is required"))
 		}
+		if old := s.versions[p.TextDocument.URI]; old != nil && p.TextDocument.Version != nil && *p.TextDocument.Version <= *old {
+			return nil // A delayed update must not restore stale dependency text.
+		}
 		if err := s.storeDocument(p.TextDocument.URI, *p.ContentChanges[0].Text, true); err != nil {
 			return s.publishInputError(p.TextDocument.URI, err)
 		}
+		s.setVersion(p.TextDocument.URI, p.TextDocument.Version)
 		return s.publishDiagnostics(p.TextDocument.URI)
 
 	case "textDocument/didClose":
@@ -290,10 +304,7 @@ func (s *Server) handle(req *rpcRequest) error {
 		if err := decodeStrict(req.Params, &p); err != nil {
 			return s.invalidParams(req, err)
 		}
-		delete(s.docs, p.TextDocument.URI)
-		return s.write(rpcResponse{Method: "textDocument/publishDiagnostics", Params: map[string]any{
-			"uri": p.TextDocument.URI, "diagnostics": []any{},
-		}})
+		return s.closeDocument(p.TextDocument.URI)
 
 	case "textDocument/hover":
 		var p struct {
@@ -377,6 +388,15 @@ func (s *Server) storeDocument(uri, text string, mustExist bool) error {
 	if !exists && len(s.docs) >= maxDocuments {
 		return fmt.Errorf("at most %d documents may be open", maxDocuments)
 	}
+	if err := s.checkSourceAlias(uri); err != nil {
+		return err
+	}
+	if err := s.checkEffectiveSourceSize(uri, text); err != nil {
+		return err
+	}
+	if s.docs == nil {
+		s.docs = make(map[string]string)
+	}
 	s.docs[uri] = text
 	return nil
 }
@@ -415,28 +435,17 @@ type position struct {
 // Diagnose parses and compiles source with Gregor. If the filing incorporates
 // statutes, Diagnose checks syntax only because it has no statute source.
 func Diagnose(src string) []map[string]any {
-	prog, err := gregor.Parse(src)
-	if err == nil && len(prog.Incorporations) == 0 {
-		_, err = gregor.Compile(prog)
+	return diagnose(src, false)
+}
+
+func diagnose(src string, useCanon bool) []map[string]any {
+	const uri = "untitled:diagnose"
+	s := &Server{Canon: useCanon, docs: map[string]string{uri: src}}
+	byURI, err := s.collectDiagnostics(context.Background())
+	if err != nil {
+		return []map[string]any{sourceDiagnostic(src, err)}
 	}
-	if err == nil {
-		return []map[string]any{}
-	}
-	line, col := 1, 1
-	msg := err.Error()
-	if rej, ok := errors.AsType[*gregor.RejectedFiling](err); ok {
-		line, col, msg = rej.Line, rej.Col, rej.Particulars
-	}
-	start, end := diagnosticRange(src, line, col)
-	return []map[string]any{{
-		"range": map[string]any{
-			"start": start,
-			"end":   end,
-		},
-		"severity": 1,
-		"source":   "gregor",
-		"message":  msg + " (Filing would be rejected pursuant to Article §4.2.)",
-	}}
+	return byURI[uri]
 }
 
 // Gregor reports one-based byte columns; LSP uses zero-based UTF-16 columns.
@@ -465,13 +474,6 @@ func diagnosticRange(src string, line, column int) (position, position) {
 		}
 	}
 	return start, end
-}
-
-func (s *Server) publishDiagnostics(uri string) error {
-	return s.write(rpcResponse{Method: "textDocument/publishDiagnostics", Params: map[string]any{
-		"uri":         uri,
-		"diagnostics": Diagnose(s.docs[uri]),
-	}})
 }
 
 // wordAt extracts the upper-case keyword under the cursor, if any.
