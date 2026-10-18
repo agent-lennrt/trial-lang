@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lennrt/trial-lang/canon"
 	"github.com/lennrt/trial-lang/internal/court"
 	"github.com/lennrt/trial-lang/internal/docket"
 )
@@ -31,10 +30,14 @@ func runLocalCommand(ctx context.Context, args []string, out, diagnostics io.Wri
 }
 
 func reportLocalResult(err error, diagnostics io.Writer) int {
+	return reportCommandResult("run", err, diagnostics)
+}
+
+func reportCommandResult(command string, err error, diagnostics io.Writer) int {
 	if err != nil {
 		// Failure is already the result; there is no second stream on which
 		// to report a diagnostic-write failure.
-		_, _ = fmt.Fprintf(diagnostics, "trial run: %v\n", err)
+		_, _ = fmt.Fprintf(diagnostics, "trial %s: %v\n", command, err)
 		return 1
 	}
 	return 0
@@ -46,10 +49,14 @@ func reportLocalResult(err error, diagnostics io.Writer) int {
 // Do not use this runner with caller-owned writers; those must be joined before
 // returning, as runLocalCommand does.
 func runProcessAction(ctx context.Context, action func() error, diagnostics io.Writer) int {
+	return localProcessAction(ctx, action, diagnostics, "run")
+}
+
+func localProcessAction(ctx context.Context, action func() error, diagnostics io.Writer, command string) int {
 	var reportOnce sync.Once
 	var code int
 	report := func(err error) int {
-		reportOnce.Do(func() { code = reportLocalResult(err, diagnostics) })
+		reportOnce.Do(func() { code = reportCommandResult(command, err, diagnostics) })
 		return code
 	}
 	done := make(chan int, 1)
@@ -133,39 +140,11 @@ func runLocalCommandWithRunner(ctx context.Context, args []string, out, diagnost
 	runCtx, cancel := context.WithTimeout(ctx, *timeout)
 	defer cancel()
 	return perform(runCtx, func() error {
-		statutes := make([]string, 0, len(enactments)+len(canon.Files()))
-		if *useCanon {
-			for _, name := range canon.Files() {
-				source, err := canon.FS.ReadFile(name)
-				if err != nil {
-					return fmt.Errorf("read canon: %w", err)
-				}
-				statutes = append(statutes, string(source))
-			}
-		}
-		totalStatuteBytes := 0
-		for _, name := range enactments {
-			if err := runCtx.Err(); err != nil {
-				return err
-			}
-			source, err := readSource(runCtx, name)
-			if err != nil {
-				return fmt.Errorf("read statute: %w", err)
-			}
-			totalStatuteBytes += len(source)
-			if totalStatuteBytes > docket.MaxReadBytes {
-				return fmt.Errorf("statutes exceed %d bytes", docket.MaxReadBytes)
-			}
-			statutes = append(statutes, string(source))
-		}
-		if err := runCtx.Err(); err != nil {
+		source, statutes, err := loadLocalSources(runCtx, path, enactments, *useCanon)
+		if err != nil {
 			return err
 		}
-		source, err := readSource(runCtx, path)
-		if err != nil {
-			return fmt.Errorf("read program: %w", err)
-		}
-		return executeLocal(runCtx, string(source), statutes, inputs, out)
+		return executeLocal(runCtx, source, statutes, inputs, out)
 	}, diagnostics)
 }
 

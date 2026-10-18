@@ -29,12 +29,14 @@ type Server struct {
 	In      io.Reader
 	Out     io.Writer
 	Version string // reported in serverInfo
+	Local   bool   // Log is temporary session storage; report its lifetime to clients.
 }
 
 const (
 	protocolVersion    = "2025-06-18"
 	maxRequestBytes    = 16 << 20
 	maxSourceBytes     = 4 << 20
+	maxToolEnactments  = 100
 	maxToolValues      = 1000
 	maxPageSize        = 1000
 	defaultPageSize    = 100
@@ -267,6 +269,10 @@ func (s *Server) handle(ctx context.Context, req *rpcRequest) (rpcResponse, bool
 		}
 		// Unsupported offers receive a version we implement. Echoing an
 		// arbitrary client string would falsely claim support for that version.
+		instructions := advocateInstructions
+		if s.Local {
+			instructions = localAdvocateInstructions
+		}
 		resp.Result = map[string]any{
 			"protocolVersion": protocolVersion,
 			"capabilities":    map[string]any{"tools": map[string]any{}},
@@ -275,7 +281,7 @@ func (s *Server) handle(ctx context.Context, req *rpcRequest) (rpcResponse, bool
 				"title":   "triallang MCP server",
 				"version": s.Version,
 			},
-			"instructions": advocateInstructions,
+			"instructions": instructions,
 		}
 		return resp, true
 
@@ -331,6 +337,16 @@ session, and trial_observe to read output. Retain the case number and
 output offset. If a commit result is ambiguous, read case status before
 retrying. Broker retention, access control, backup, and recovery belong
 to the operator.`
+
+const localAdvocateInstructions = `This triallang session uses temporary in-memory
+storage without Kafka. All cases, statutes, and records disappear when this
+process exits. Case numbers cannot resume work in a new process. Write programs
+in legal English. Use trial_test before filing; it is isolated from session
+state, so supply its statute sources inline. Use trial_file to create a case,
+trial_serve to add input, trial_proceed to execute a bounded session, and
+trial_observe to read output. Retain the case number and output offset while
+this process runs. Proceed with child cases explicitly; no background docket
+worker is started. Per-call limits do not bound total session memory.`
 
 // --- the tools ---------------------------------------------------------
 
@@ -420,10 +436,16 @@ func toolDefs() []map[string]any {
 		},
 		{
 			"name":        "trial_test",
-			"description": "Run a program and deposition on a new in-memory log. This call does not access Kafka or create a persistent case. The deposition may SERVE values, EXPECT output or records, select an expected outcome, and ALLOW at most 600 court days.",
+			"description": "Run a program and deposition on a new in-memory log. This call does not access files or Kafka or create a persistent case. Supply inline enactments for every ENACT label; statutes are enacted in deposition order. The deposition may SERVE values, EXPECT output or records, select an expected outcome, and ALLOW at most 600 court days.",
 			"inputSchema": obj(map[string]any{
 				"program_source":    map[string]any{"type": "string", "description": "The triallang program to depose."},
 				"deposition_source": map[string]any{"type": "string", "description": "The deposition to hear it against."},
+				"enactments": map[string]any{
+					"type":                 "object",
+					"description":          "Inline statute sources keyed by exact ENACT labels. Supply every declared label and no unused keys. Each source is at most 4 MiB; the sequence, counting repeated labels, is at most 256 MiB. The complete JSON request is at most 16 MiB.",
+					"maxProperties":        maxToolEnactments,
+					"additionalProperties": map[string]any{"type": "string"},
+				},
 			}, "program_source", "deposition_source"),
 		},
 	}
@@ -436,14 +458,15 @@ func (s *Server) call(ctx context.Context, name string, rawArgs json.RawMessage)
 		return errorResult("the arguments could not be read: %v", err)
 	}
 	var args struct {
-		Case             string   `json:"case"`
-		Source           string   `json:"source"`
-		Values           []any    `json:"values"`
-		FromOffset       int64    `json:"from_offset"`
-		Limit            int      `json:"limit"`
-		Days             *float64 `json:"for_at_most_court_days"`
-		ProgramSource    string   `json:"program_source"`
-		DepositionSource string   `json:"deposition_source"`
+		Case             string             `json:"case"`
+		Source           string             `json:"source"`
+		Values           []any              `json:"values"`
+		FromOffset       int64              `json:"from_offset"`
+		Limit            int                `json:"limit"`
+		Days             *float64           `json:"for_at_most_court_days"`
+		ProgramSource    string             `json:"program_source"`
+		DepositionSource string             `json:"deposition_source"`
+		Enactments       map[string]*string `json:"enactments"`
 	}
 	args.Limit = defaultPageSize
 	if len(rawArgs) > 0 {
@@ -746,6 +769,9 @@ func (s *Server) call(ctx context.Context, name string, rawArgs json.RawMessage)
 		if err != nil {
 			return errorResult("deposition could not be parsed: %v", err)
 		}
+		if err := setTestEnactments(dep, args.Enactments); err != nil {
+			return errorResult("enactments could not be loaded: %v", err)
+		}
 		res := deposition.Run(ctx, args.ProgramSource, dep)
 		result := map[string]any{
 			"consistent":      res.OK(),
@@ -792,8 +818,8 @@ func validateToolFields(name string, raw json.RawMessage) error {
 		allowed = []string{"from_offset", "limit"}
 	case "trial_statutes":
 	case "trial_test":
-		allowed = []string{"program_source", "deposition_source"}
-		required = allowed
+		allowed = []string{"program_source", "deposition_source", "enactments"}
+		required = []string{"program_source", "deposition_source"}
 	default:
 		return nil
 	}
@@ -813,6 +839,46 @@ func validateToolFields(name string, raw json.RawMessage) error {
 			return fmt.Errorf("field %q is required for %s", field, name)
 		}
 	}
+	return nil
+}
+
+// setTestEnactments resolves exact ENACT labels without filesystem or log
+// access. Validate every source before assigning the declaration-ordered list.
+func setTestEnactments(dep *deposition.Deposition, sources map[string]*string) error {
+	if len(sources) > maxToolEnactments {
+		return fmt.Errorf("at most %d inline statutes may be supplied", maxToolEnactments)
+	}
+	keys := make([]string, 0, len(sources))
+	for name := range sources {
+		keys = append(keys, name)
+	}
+	sort.Strings(keys)
+	for _, name := range keys {
+		source := sources[name]
+		if source == nil {
+			return fmt.Errorf("statute %q must be a string, not null", name)
+		}
+		if len(*source) > maxSourceBytes {
+			return fmt.Errorf("statute %q exceeds the %d-byte limit", name, maxSourceBytes)
+		}
+		if !slices.Contains(dep.Enacts, name) {
+			return fmt.Errorf("statute %q has no ENACT declaration", name)
+		}
+	}
+	ordered := make([]string, 0, len(dep.Enacts))
+	total := 0
+	for _, name := range dep.Enacts {
+		source, ok := sources[name]
+		if !ok {
+			return fmt.Errorf("ENACT %q has no inline source", name)
+		}
+		total += len(*source)
+		if total > docket.MaxReadBytes {
+			return fmt.Errorf("enacted sources exceed %d bytes", docket.MaxReadBytes)
+		}
+		ordered = append(ordered, *source)
+	}
+	dep.EnactSources = ordered
 	return nil
 }
 

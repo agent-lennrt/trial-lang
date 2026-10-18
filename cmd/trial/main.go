@@ -1576,15 +1576,32 @@ func auditDocket(ctx context.Context, log *docket.KafkaLog) int {
 func mcpCmd(ctx context.Context, rest []string) int {
 	fs := commandFlags("mcp")
 	broker := fs.String("broker", brokerDefault(), "Kafka broker address")
+	local := fs.Bool("local", false, "use temporary in-memory storage without Kafka")
 	if err := fs.Parse(rest); err != nil {
 		return 2
 	}
 	if unexpectedArgs("mcp", fs.Args()) {
 		return 2
 	}
-	log, code := openLog(ctx, *broker)
-	if log == nil {
-		return code
+	var explicitBroker bool
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "broker" {
+			explicitBroker = true
+		}
+	})
+	if *local && explicitBroker {
+		fmt.Fprintln(os.Stderr, "trial mcp: --local and --broker cannot be combined.")
+		return 2
+	}
+	var log docket.Log
+	if *local {
+		log = docket.NewMemoryLog()
+	} else {
+		remote, code := openLog(ctx, *broker)
+		if remote == nil {
+			return code
+		}
+		log = remote
 	}
 	defer log.Close()
 
@@ -1592,6 +1609,7 @@ func mcpCmd(ctx context.Context, rest []string) int {
 	input, closeInput := commandInput(ctx)
 	defer closeInput()
 	srv := newAdvocateServer(log, input, os.Stdout)
+	srv.Local = *local
 	if err := srv.Serve(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "MCP server stopped: %v\n", err)
 		return 1

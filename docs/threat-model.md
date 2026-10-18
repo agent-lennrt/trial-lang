@@ -53,6 +53,11 @@ The stdin helper can live until process exit. Programs can allocate substantial
 memory through retained execution records. Local execution is not a security sandbox. See
 [ADR 0004](adr/0004-brokerless-run.md).
 
+`trial check` shares local source loading, dependency bounds, and the process
+cancellation grace. It files or enacts into a fresh memory log without executing
+instructions or starting child workers. It does not prove runtime safety. See
+[ADR 0009](adr/0009-compile-only-local-check.md).
+
 ### MCP client to Advocate
 
 Each request is newline-delimited JSON. A request may use at most 16 MiB.
@@ -63,8 +68,19 @@ batches contain at most 1,000 values and 4 MiB. Pagination returns at most
 Service writes use one atomic storage batch. A failed batch must not deliver a
 prefix.
 
+`trial_test` resolves deposition `ENACT` labels only from its optional inline
+`enactments` map. It does not read those labels as filesystem paths or consult
+the server log. Input sources retain the 4 MiB per-source bound and the request
+retains its 16 MiB limit. See [ADR 0008](adr/0008-mcp-deposition-dependencies.md).
+
 Residual risk: MCP uses standard input and output. The process that starts it
 controls both streams and the Kafka address.
+
+`trial mcp --local` uses one temporary memory log for the process lifetime and
+does not open a broker connection. Cases and statutes cannot be recovered after
+exit. Request limits still apply, but retained session histories have no total
+heap quota. This mode is not a sandbox and does not automatically run child
+cases. See [ADR 0010](adr/0010-local-mcp-sessions.md).
 
 ### LSP client to Counsel
 

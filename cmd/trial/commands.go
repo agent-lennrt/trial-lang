@@ -31,6 +31,7 @@ type command struct {
 // would form an initialization cycle.
 func commandTable() []command {
 	return []command{
+		{name: "check", run: checkCmd, valueFlags: []string{"enact", "timeout"}},
 		{name: "run", run: runCmd, valueFlags: []string{"serve", "enact", "timeout"}},
 		{name: "summon", run: noArgs("summon", summon)},
 		{name: "dismiss", run: noArgs("dismiss", dismiss)},

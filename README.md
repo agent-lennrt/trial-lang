@@ -54,6 +54,16 @@ git clone https://github.com/lennrt/trial-lang.git
 cd trial-lang
 ```
 
+Check source and imports without executing the program or connecting to Kafka:
+
+```console
+go run ./cmd/trial check examples/hello.trial
+go run ./cmd/trial check --canon examples/the-wave-chamber.trial
+```
+
+`check` accepts Form K-1 cases and Form S-1 statutes. It checks filing rules;
+runtime errors and nonterminating programs still need execution tests.
+
 Run a program from this checkout without Kafka:
 
 ```console
@@ -306,10 +316,21 @@ The CI, security, and release workflows do not run on a schedule. See
 
 ## Interfaces
 
-The CLI includes local execution, case operations, depositions, the Advocate MCP server, and the
-Counsel language server. Run `trial help` for commands.
+The CLI includes source checks, local execution, case operations, depositions,
+the Advocate MCP server, and the Counsel language server. Run `trial help` for commands.
 See the [interface reference](docs/interfaces.md) for inputs, outputs, protocol
 limits, and API documentation.
+
+Start Advocate without Kafka for a temporary authoring session:
+
+```console
+go run ./cmd/trial mcp --local
+```
+
+The client uses the same MCP tools; cases and statutes last only until this
+process exits. `trial_test` uses a separate isolated log for each deposition and
+accepts inline statute sources for its `ENACT` declarations. Omit `--local` to
+use Kafka-backed state.
 
 `canon` is the only importable Go package. See the
 [Go API compatibility record](docs/api-compatibility.md).

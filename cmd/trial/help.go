@@ -11,6 +11,10 @@ USAGE
   trial <command> [flags]
 
 LOCAL EXECUTION
+  trial check <source.trial>      Compile a K-1 case or S-1 statute without running it
+    --enact <statute.trial>        Enact a dependency; repeat in dependency order
+    --canon                       Enact the bundled canon before other statutes
+    --timeout 30s                 Positive limit for loading and checking
   trial run <program.trial>       Run once with temporary memory storage
     --serve <value>               Supply input; repeat in receive order
     --enact <statute.trial>        Enact a statute; repeat in dependency order
@@ -66,6 +70,8 @@ COURT COMMANDS
 
 PROTOCOL COMMANDS
   trial mcp                       Run the Advocate MCP server on standard I/O
+    --local                       Use temporary memory storage; all state ends on exit
+                                  Cannot be combined with --broker
   trial counsel                   Run the Counsel LSP server on standard I/O
 
 OTHER COMMANDS
@@ -91,6 +97,7 @@ USAGE
   trial <command> [flags]
 
 COMMON COMMANDS
+  check <source.trial>  Check source and imports without execution
   run <program.trial>   Run locally without Kafka
   summon                Start the local broker
   file <program.trial>  Create a case
@@ -103,12 +110,14 @@ COMMON COMMANDS
 Run "trial help" for all commands. Run "trial help <command>" for one command.`
 
 var helpExamples = map[string]string{
+	"check":   "  trial check examples/hello.trial\n  trial check --canon examples/the-wave-chamber.trial",
 	"run":     "  trial run examples/hello.trial\n  trial run examples/countdown.trial --serve 3\n  trial run examples/the-cornell-box.trial --canon --timeout 2m",
 	"file":    "  trial file examples/hello.trial\n  trial proceed \"$(trial file examples/hello.trial --quiet)\"",
 	"proceed": "  trial proceed case-7f3a1c8e2d4b609af137c5e9\n  trial proceed --docket",
 	"observe": "  trial observe case-7f3a1c8e2d4b609af137c5e9 --from-the-beginning",
 	"serve":   "  trial serve case-7f3a1c8e2d4b609af137c5e9 3\n  trial serve case-7f3a1c8e2d4b609af137c5e9 -- -5",
 	"test":    "  trial test examples\n  trial test --transcript examples/hello.deposition",
+	"mcp":     "  trial mcp --local\n  trial mcp --broker localhost:9092",
 	"status":  "  trial status case-7f3a1c8e2d4b609af137c5e9 --json",
 	"docket":  "  trial docket --json",
 	"enact":   "  trial enact --canon",
