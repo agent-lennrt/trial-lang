@@ -35,7 +35,7 @@ not need Kafka for the quickstart. Local state lasts only until the command ends
 
 ## Quickstart
 
-Prerequisite: Go 1.27.0.
+Prerequisite: Go 1.27.2.
 
 Install the latest release:
 
@@ -130,7 +130,7 @@ appear once and that an audit can reproduce the result.
 
 ![Kafka-backed process recovery in triallang](docs/the-recovery.gif)
 
-Run it with Docker Compose and Go 1.27.0:
+Run it with Docker Compose and Go 1.27.2:
 
 ```console
 go build -o trial ./cmd/trial
@@ -167,7 +167,7 @@ the same terminal palette and window style, with pacing suited to its output.
 
 ## Live broker workflow
 
-Prerequisites: Docker with Compose and Go 1.27.0.
+Prerequisites: Docker with Compose and Go 1.27.2.
 
 Start one local KRaft broker:
 
@@ -275,7 +275,7 @@ decisions.
 
 ## Verification
 
-Run the required local checks with Go 1.27.0:
+Run the required local checks with Go 1.27.2:
 
 ```console
 make verify

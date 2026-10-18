@@ -26,7 +26,7 @@ The maintainer aims to acknowledge reports and enhancement requests within
 
 ## Prerequisites
 
-- Go 1.27.0
+- Go 1.27.2
 - Docker with Compose for Kafka integration tests
 - Node.js 20.19.0 or later and npm for OpenSpec validation
 
