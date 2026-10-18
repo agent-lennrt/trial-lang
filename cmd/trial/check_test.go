@@ -125,18 +125,24 @@ func TestCheckReadAndCancellationErrors(t *testing.T) {
 	if err := checkLocalSource(ctx, localSource(`PROCLAIM 1.`), nil); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled validation: %v", err)
 	}
+	expired, expire := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer expire()
 	for _, tc := range []struct {
-		ctx  context.Context
-		args []string
+		name       string
+		ctx        context.Context
+		args       []string
+		diagnostic string
 	}{
-		{ctx, []string{path}},
-		{t.Context(), []string{path, "--timeout=1ns"}},
-		{t.Context(), []string{filepath.Join(t.TempDir(), "absent.trial")}},
+		{"canceled", ctx, []string{path}, "context canceled"},
+		{"expired", expired, []string{path}, "context deadline exceeded"},
+		{"missing source", t.Context(), []string{filepath.Join(t.TempDir(), "absent.trial")}, "read program"},
 	} {
-		var out, diagnostics bytes.Buffer
-		if code := checkLocalCommand(tc.ctx, tc.args, &out, &diagnostics); code != 1 || out.Len() != 0 || diagnostics.Len() == 0 {
-			t.Fatalf("exit=%d stdout=%q stderr=%q", code, &out, &diagnostics)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			var out, diagnostics bytes.Buffer
+			if code := checkLocalCommand(tc.ctx, tc.args, &out, &diagnostics); code != 1 || out.Len() != 0 || !strings.Contains(diagnostics.String(), tc.diagnostic) {
+				t.Fatalf("exit=%d stdout=%q stderr=%q; want %q", code, &out, &diagnostics, tc.diagnostic)
+			}
+		})
 	}
 }
 

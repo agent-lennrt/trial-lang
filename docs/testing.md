@@ -22,7 +22,7 @@ Node.js and npm. See the [OpenSpec guide](openspec.md).
 | Class | Command | External service |
 | --- | --- | --- |
 | Unit and functional | `go test -timeout=3m ./...` | None |
-| Race | `go test -race -timeout=10m ./...` | None |
+| Race | `make race` | None |
 | Property | `make property` | None |
 | Fuzz | `make fuzz` (30 seconds each for source/deposition parsing, LSP framing, JSON-RPC envelopes, MCP numeric IDs, and fixed-point arithmetic) | None |
 | Statement coverage | `make coverage` (writes `coverage.out`) | None |
@@ -32,6 +32,12 @@ Node.js and npm. See the [OpenSpec guide](openspec.md).
 
 The generated Court properties use fixed seeds from 0 through 23. A failing
 subtest names its seed.
+
+`make race` runs one package at a time with `-p 1`. The Court, deposition, and
+gallery packages execute the same costly examples; running them together under
+the race detector can exhaust the gallery's deadline on shared CI runners.
+Tests within each package retain their concurrency. Every package still runs
+with the race detector and the existing deadlines.
 
 The Go fuzzer records a reproducing input when it finds a failure. A timed fuzz
 run is exploratory and is not deterministic.
@@ -87,7 +93,7 @@ The remaining Makefile targets show the pinned lint, license, and security tools
 
 ```console
 go test -timeout=3m ./...
-go test -race -timeout=10m ./...
+go test -p 1 -race -timeout=10m ./...
 go vet ./...
 go mod tidy -diff
 go run ./cmd/trial test examples canon
