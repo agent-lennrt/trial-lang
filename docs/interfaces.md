@@ -199,15 +199,48 @@ Unsupported request methods return `-32601`.
 By default, documents with `INCORPORATE BY REFERENCE` receive syntax-only
 diagnostics. Start `trial counsel --canon` to also compile documents whose
 imports all name bundled statutes, including their transitive dependencies.
-If any import is custom or unknown, the whole document keeps syntax-only checks.
-Counsel does not fetch workspace files or broker statutes. Each check uses fresh
-temporary storage and discards any temporary filing without executing it.
+With only `--canon`, an unknown import keeps syntax-only checks.
 
-Parse errors retain their ordinary source ranges. A canon compilation error
-uses a local range only if the same rejection is independently reproduced from
-the source alone. Otherwise its range is zero-width at document start and its
-message identifies the bundled-import context; a canon file's line is never
-presented as a local source location. See [ADR 0011](adr/0011-canon-editor-diagnostics.md).
+Use repeated `--enact <path>` options to supply custom statutes in dependency
+order. Add `--canon` to load bundled statutes first:
+
+```console
+trial counsel --canon --enact ./statutes/base.trial --enact ./statutes/project.trial
+```
+
+Explicit sources define the complete import context: missing imports and invalid
+statutes produce diagnostics. The command reads up to 100 distinct paths, 4 MiB
+per file, and 256 MiB total. Missing or unreadable files fail startup. `-` is
+rejected because standard input carries the protocol. Duplicate normalized paths
+are rejected. Distinct files may enact the same statute name; the last successful
+enactment supplies imports. Invalid inputs remain diagnosed even if an earlier
+version is available.
+Relative paths resolve against the server's working directory.
+
+An open document whose URI matches a configured file overrides that file's text.
+Dependency edits refresh open documents. Closing the configured document rereads
+its saved file and refreshes diagnostics; a failed reread is reported instead of
+silently using stale text. External changes to closed files require restarting
+the server. Open unconfigured statutes do not enter the import context. File URI
+escaping and lexical paths are normalized; Windows paths match without regard
+to case. Symlinks are not resolved. A configured file cannot be open under two
+URI aliases at once.
+
+Compiler diagnostics carry source ownership. Errors in custom statutes appear
+at the actual file and UTF-16 range; errors in bundled sources use stable
+`trial-canon:///` virtual URIs. Related information identifies importing locations
+when available. Editors may display these virtual locations without being able
+to open their text, so bundled-source failures also produce a contextual
+diagnostic in the importing document. Configured sources are validated on every
+refresh. Closing
+one importer does not clear errors required by another. Fixed or obsolete
+diagnostics are cleared. Versioned document diagnostics identify the accepted
+version; stale changes are ignored.
+See [ADR 0012](adr/0012-custom-statute-editor-diagnostics.md).
+
+Counsel reads only explicitly configured files. It does not discover dependencies
+from imports or arbitrary document URIs, contact a broker, or execute documents.
+Temporary validation state is discarded between refreshes.
 
 Malformed JSON returns `-32700`; valid JSON with an invalid request envelope
 returns `-32600`. An envelope must have `jsonrpc: "2.0"` and a nonempty method.

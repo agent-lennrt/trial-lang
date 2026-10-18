@@ -88,10 +88,15 @@ Headers, header count, message length, URI length, document count, and document
 size are bounded. The server accepts one full-document change per notification.
 Unknown request methods return `-32601`.
 
-Optional `--canon` diagnostics load only embedded statutes into fresh temporary
-memory storage. They do not execute documents, retain temporary cases between
-checks, read workspace dependencies, or contact Kafka. Any unknown custom import
-keeps syntax-only checking. See [ADR 0011](adr/0011-canon-editor-diagnostics.md).
+Optional `--canon` diagnostics load embedded statutes. Repeated `--enact` options
+allow bounded local statute files. The CLI resolves an explicit URI-to-path
+allowlist at startup; only those files are reread on document close. Import names
+and arbitrary LSP URIs never authorize filesystem reads. Configured open buffers
+override disk text and trigger fresh validation. Counsel does not execute
+documents, retain temporary cases between refreshes, or contact Kafka. Unknown
+imports keep syntax-only checking unless explicit sources define a complete
+context. Source ownership metadata changes diagnostic locations without changing
+stored instructions or JSON. See [ADR 0012](adr/0012-custom-statute-editor-diagnostics.md).
 
 Residual risk: LSP diagnostics may contain source-derived text. Editors must
 treat diagnostics as untrusted display data.
@@ -143,7 +148,7 @@ Residual risks:
 | Enactments per deposition | 100 |
 | Summonses, proclamations, or record expectations | 1,000 each |
 | Deposition duration | 600 court days |
-| Explicit statutes for `run` | 100 files, 4 MiB each, 256 MiB total |
+| Explicit statutes for `run`, `check`, and `counsel` | 100 files, 4 MiB each, 256 MiB total |
 | Inputs for `run` | 1,000 values and 4 MiB total |
 | Default timeout for `run` | 30 seconds, with a positive override |
 | Concurrent child workers for `run` | 64 |

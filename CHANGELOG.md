@@ -87,8 +87,9 @@
 ### Added
 
 - Add `trial counsel --canon` to compile known bundled imports during editor
-  diagnostics, with syntax-only fallback for custom imports and honest ranges
-  for errors originating from imported declarations.
+  diagnostics, and repeated `--enact` paths for custom statutes. Track source
+  ownership for accurate cross-file ranges, refresh imports from open dependency
+  buffers, reload configured files on close, and clear stale diagnostics.
 - Add `trial check` to compile K-1 cases and S-1 statutes without execution or
   Kafka, with ordered local dependencies, the bundled canon, stdin, and a timeout.
 - Let MCP `trial_test` accept inline statute sources for deposition `ENACT`

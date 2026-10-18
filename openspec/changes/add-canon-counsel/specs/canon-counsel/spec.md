@@ -8,30 +8,31 @@ from the bundled canon, while preserving honest diagnostic locations.
 ### Requirement: Explicit bundled import context
 `trial counsel --canon` SHALL compile a parsed document when every declared
 import names a bundled statute. It SHALL use existing incorporation and compiler
-rules without executing the document. Default mode SHALL remain
-unchanged. Unknown or mixed custom imports SHALL retain syntax-only diagnostics.
+rules without executing the document. Default mode SHALL remain unchanged.
+When no explicit statutes are configured, unknown or mixed custom imports SHALL
+retain syntax-only diagnostics.
 
 #### Scenario: Invalid referral with a known import
 - **WHEN** a canon-enabled document imports a bundled statute and refers to a missing article
-- **THEN** Counsel reports the compilation error at the independently verified local source range
+- **THEN** Counsel reports the compilation error at its owning local source range
 
 #### Scenario: Valid transitive imports
 - **WHEN** a document uses offices provided by a bundled statute and its dependencies
 - **THEN** Counsel resolves them without false undefined-office errors
 
 #### Scenario: Unknown custom dependency
-- **WHEN** any import is outside the bundled canon
+- **WHEN** any import is outside the bundled canon and no explicit statutes are configured
 - **THEN** Counsel checks syntax without claiming complete compilation or fetching external sources
 
 ### Requirement: Report diagnostic locations honestly
 Parse diagnostics SHALL retain UTF-16 source ranges. Imported compilation
-failures SHALL use a local range only when independent compilation yields the
-same rejection particulars, line, and column. Otherwise they SHALL use a
-zero-width document-start range and identify the canon-import context.
+failures SHALL use the owning source's text and URI, as specified by the
+accompanying custom-statute-counsel capability. Bundled sources SHALL use stable
+virtual URIs rather than treating imported lines as local source lines.
 
 #### Scenario: Local name collides with canon
 - **WHEN** compilation reports a collision originating from an appended canon declaration
-- **THEN** Counsel reports a document-level diagnostic instead of treating the canon line as a local source line
+- **THEN** Counsel reports the canon declaration's virtual URI and range instead of treating its line as local
 
 ### Requirement: Fresh document checks
 Checking SHALL NOT execute source or retain cases between checks. Each imported

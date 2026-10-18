@@ -44,9 +44,9 @@ func TestCanonDiagnosticLocations(t *testing.T) {
 		documentLevel bool
 	}{
 		{"local referral", canonProgram("REFER TO ARTICLE 99."), "ARTICLE 99", position{Line: 4}, position{Line: 4, Character: 1}, false},
-		{"imported arity", canonProgram("PROCLAIM THE FINDING OF maximum REGARDING 1."), "expects 2 argument(s); received 1", position{}, position{}, true},
-		{"imported collision", canonProgram("ADJOURN INDEFINITELY.\nTHE OFFICE OF maximum, CONCERNING a AND b.\nREMAND WITH a."), "established more than once", position{}, position{}, true},
-		{"imported concern conflict", "FORM K-1.\nIN THE MATTER OF: editor.\nINCORPORATE BY REFERENCE statutes-of-arithmetic.\nHEREINAFTER, n SHALL MEAN 1.\nARTICLE 1.\nADJOURN INDEFINITELY.", "uses defined term", position{}, position{}, true},
+		{"imported arity", canonProgram("PROCLAIM THE FINDING OF maximum REGARDING 1."), "expects 2 argument(s); received 1", position{Line: 4}, position{Line: 4, Character: 1}, false},
+		{"imported collision", canonProgram("ADJOURN INDEFINITELY.\nTHE OFFICE OF maximum, CONCERNING a AND b.\nREMAND WITH a."), "established more than once", position{Line: 2}, position{Line: 2, Character: 1}, true},
+		{"imported concern conflict", "FORM K-1.\nIN THE MATTER OF: editor.\nINCORPORATE BY REFERENCE statutes-of-arithmetic.\nHEREINAFTER, n SHALL MEAN 1.\nARTICLE 1.\nADJOURN INDEFINITELY.", "uses defined term", position{Line: 2}, position{Line: 2, Character: 1}, true},
 		{"UTF16 parse range", canonProgram("PROCLAIM \"😀\" EXTRA."), "expected", position{Line: 4, Character: 14}, position{Line: 4, Character: 15}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -58,7 +58,7 @@ func TestCanonDiagnosticLocations(t *testing.T) {
 			if rangeValue["start"] != tc.start || rangeValue["end"] != tc.end {
 				t.Fatalf("range = %v, want %+v..%+v", rangeValue, tc.start, tc.end)
 			}
-			contextual := strings.HasPrefix(diagnostics[0]["message"].(string), "While checking bundled canon imports:")
+			contextual := strings.HasPrefix(diagnostics[0]["message"].(string), "While checking this document, bundled statute ")
 			if contextual != tc.documentLevel {
 				t.Fatalf("document-level context = %t, want %t: %v", contextual, tc.documentLevel, diagnostics)
 			}

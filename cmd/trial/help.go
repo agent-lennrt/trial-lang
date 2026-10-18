@@ -73,7 +73,9 @@ PROTOCOL COMMANDS
     --local                       Use temporary memory storage; all state ends on exit
                                   Cannot be combined with --broker
   trial counsel                   Run the Counsel LSP server on standard I/O
-    --canon                       Compile imports from the bundled canon; custom imports stay syntax-only
+    --canon                       Load bundled statutes before custom dependencies
+    --enact <path>                Load a custom statute; repeat in dependency order
+                                  Explicit files form the complete import context
 
 OTHER COMMANDS
   trial help [command]            Show all help or one command
@@ -119,7 +121,7 @@ var helpExamples = map[string]string{
 	"serve":   "  trial serve case-7f3a1c8e2d4b609af137c5e9 3\n  trial serve case-7f3a1c8e2d4b609af137c5e9 -- -5",
 	"test":    "  trial test examples\n  trial test --transcript examples/hello.deposition",
 	"mcp":     "  trial mcp --local\n  trial mcp --broker localhost:9092",
-	"counsel": "  trial counsel\n  trial counsel --canon",
+	"counsel": "  trial counsel\n  trial counsel --canon\n  trial counsel --canon --enact examples/the-statutes-of-arithmetic.trial",
 	"status":  "  trial status case-7f3a1c8e2d4b609af137c5e9 --json",
 	"docket":  "  trial docket --json",
 	"enact":   "  trial enact --canon",

@@ -1,21 +1,17 @@
 # Design
 
-Parse documents normally. Without imports use the existing compiler. With
-`--canon`, build a fresh memory-backed statute context from embedded sources;
-compile the document only when every declared import exists in that context.
-Use Court's existing File/Enact validation rather than duplicating dependency
-traversal. Release the local context and any temporary filing after each check;
-never execute the document.
+Parse documents normally. Without imports use the existing compiler. Build one
+fresh memory-backed statute context per refresh from enabled canon and explicit
+sources. Use Court's read-only Check to validate roots without duplicating
+dependency traversal or publishing checked roots. Release the context after the
+refresh; never execute documents.
 
-Keep syntax-only fallback when custom dependencies are unresolved. Do not
+Without explicit sources, keep syntax-only fallback when custom dependencies are unresolved. Do not
 discover files or connect to a broker. Existing synchronous parsing and document
 limits remain in effect.
 
-Preserve parse ranges. For imported compilation failures, compare the rejection
-against independent compilation of the original source. Exact matching
-particulars/line/column establish a local diagnostic location. Otherwise emit a
-zero-width document-start range with explicit canon-import context. Never use
-the independent rejection when authoritative import-aware checking succeeded.
-
-This deliberately postpones cross-file source maps, workspace configuration,
-and compiler caching. Fresh contexts avoid accumulated cases and stale edits.
+Preserve parse ranges. The accompanying `add-custom-statute-counsel` proposal
+replaces the initial independent-compilation heuristic with compiler source
+ownership. Imported failures use their owning text and URI, including virtual
+bundled-source locations. Its read-only Court check also avoids creating cases
+or enacting checked roots. Fresh contexts avoid accumulated cases and stale edits.

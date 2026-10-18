@@ -333,8 +333,11 @@ accepts inline statute sources for its `ENACT` declarations. Omit `--local` to
 use Kafka-backed state.
 
 For editor diagnostics on programs that import the bundled canon, configure
-the language-server command as `trial counsel --canon`. Unknown custom imports
-retain syntax-only diagnostics. See [editor setup](editors/README.md) for details.
+the language-server command as `trial counsel --canon`. Add repeated
+`--enact /path/to/statute.trial` options for custom dependencies, in dependency
+order. Open dependency buffers update the import context, and diagnostics point
+to the source file that owns the error. Without explicit dependencies, unknown
+imports retain syntax-only diagnostics. See [editor setup](editors/README.md).
 
 `canon` is the only importable Go package. See the
 [Go API compatibility record](docs/api-compatibility.md).

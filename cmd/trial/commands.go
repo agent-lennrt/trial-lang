@@ -54,7 +54,7 @@ func commandTable() []command {
 		{name: "profile", run: profileCmd, broker: true, valueFlags: []string{"top"}},
 		{name: "burn", run: burn, broker: true},
 		{name: "mcp", run: mcpCmd, broker: true},
-		{name: "counsel", run: counselCmd},
+		{name: "counsel", run: counselCmd, valueFlags: []string{"enact"}},
 		{name: "watch", run: watch, broker: true, valueFlags: []string{"interval"}},
 		{name: "help", run: helpDispatch},
 		{name: "version", run: noArgs("version", func(context.Context) int { return versionCmd() })},

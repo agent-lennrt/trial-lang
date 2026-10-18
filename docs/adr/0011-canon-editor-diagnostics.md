@@ -4,6 +4,11 @@ Date: 2026-10-18
 
 Status: proposed
 
+The source-location heuristic below is superseded by
+[ADR 0012](0012-custom-statute-editor-diagnostics.md), which also adds explicit
+custom dependencies. The original opt-in canon and unknown-import fallback
+remain available.
+
 ## Context
 
 Counsel checks only syntax when a document imports statutes because it has no
