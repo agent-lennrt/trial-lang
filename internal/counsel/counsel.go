@@ -236,9 +236,10 @@ func (s *Server) handle(req *rpcRequest) error {
 	case "initialize":
 		return s.respond(req, rpcResponse{Result: map[string]any{
 			"capabilities": map[string]any{
-				"textDocumentSync":   1, // full synchronization
-				"hoverProvider":      true,
-				"completionProvider": map[string]any{},
+				"textDocumentSync":       1, // full synchronization
+				"hoverProvider":          true,
+				"documentSymbolProvider": true,
+				"completionProvider":     map[string]any{},
 			},
 			"serverInfo": map[string]any{"name": "trial counsel", "version": s.Version},
 		}})
@@ -305,6 +306,17 @@ func (s *Server) handle(req *rpcRequest) error {
 			return s.invalidParams(req, err)
 		}
 		return s.closeDocument(p.TextDocument.URI)
+
+	case "textDocument/documentSymbol":
+		var p struct {
+			TextDocument struct {
+				URI string `json:"uri"`
+			} `json:"textDocument"`
+		}
+		if err := decodeStrict(req.Params, &p); err != nil {
+			return s.invalidParams(req, err)
+		}
+		return s.respond(req, rpcResponse{Result: documentSymbols(s.docs[p.TextDocument.URI])})
 
 	case "textDocument/hover":
 		var p struct {
