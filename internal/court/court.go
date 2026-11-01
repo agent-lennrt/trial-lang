@@ -329,6 +329,9 @@ func (c *Court) Recover(ctx context.Context) error {
 		case "REENACTMENT", "IMPOUND":
 			c.stack = nil
 		case "PUSH":
+			if ev.Value == nil {
+				return fmt.Errorf("the dossier PUSH at offset %d has no value", r.Offset)
+			}
 			c.stack = append(c.stack, *ev.Value)
 		case "POP":
 			if len(c.stack) > 0 {
@@ -446,12 +449,31 @@ func (c *Court) Recover(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if err := validateRecoveredAttention(att); err != nil {
+		return err
+	}
 	c.pc = att.PC
 	c.summonsPos = att.Summons
 	c.heard = slices.Clone(att.Heard)
 	c.gazettePos = att.Gazette
 	c.ledgerPos = att.Ledger
 	c.note("The Court's attention rests at instruction %d. Dossier holds %d item(s); %d appeal(s) pending.", c.pc, len(c.stack), len(c.frames))
+	return nil
+}
+
+// validateRecoveredAttention rejects cursors that cannot name stored positions.
+// Heard is left to the existing selective-receive normalization for legacy logs.
+func validateRecoveredAttention(att docket.Attention) error {
+	for _, cursor := range []struct {
+		name     string
+		position int64
+	}{
+		{"PC", att.PC}, {"Summons", att.Summons}, {"Ledger", att.Ledger}, {"Gazette", att.Gazette},
+	} {
+		if cursor.position < 0 {
+			return fmt.Errorf("the recorded attention has a negative %s cursor: %d", cursor.name, cursor.position)
+		}
+	}
 	return nil
 }
 
@@ -669,9 +691,22 @@ func (c *Court) push(v law.Value) {
 	c.stack = append(c.stack, v)
 }
 
+const dossierUnderflow = "the file you requested does not exist. You are nonetheless responsible for its contents"
+
+// requireOperands checks stored arities before allocating their argument slices.
+func (c *Court) requireOperands(op string, count, extra int) error {
+	if count < 0 {
+		return guilty("instruction %s requests a negative number of operands: %d", op, count)
+	}
+	if count > len(c.stack)-extra {
+		return guilty(dossierUnderflow)
+	}
+	return nil
+}
+
 func (c *Court) pop() (law.Value, error) {
 	if len(c.stack) == 0 {
-		return law.Value{}, guilty("the file you requested does not exist. You are nonetheless responsible for its contents")
+		return law.Value{}, guilty(dossierUnderflow)
 	}
 	b, _ := json.Marshal(dossierEvent{Op: "POP"})
 	c.buffer(c.Case.Dossier(), nil, b)
@@ -1221,6 +1256,9 @@ func (c *Court) step(ctx context.Context, in law.Instr) (int64, error) {
 		return next, nil
 
 	case law.OpPetitionUnder:
+		if err := c.requireOperands(in.Op, in.Count, 1); err != nil {
+			return 0, err
+		}
 		args := make([]law.Value, in.Count)
 		for i := in.Count - 1; i >= 0; i-- {
 			v, err := c.pop()
@@ -1283,6 +1321,9 @@ func (c *Court) step(ctx context.Context, in law.Instr) (int64, error) {
 		return next, nil
 
 	case law.OpSchedule:
+		if err := c.requireOperands(in.Op, in.Count, 0); err != nil {
+			return 0, err
+		}
 		items := make([]law.Value, in.Count)
 		for i := in.Count - 1; i >= 0; i-- {
 			v, err := c.pop()
