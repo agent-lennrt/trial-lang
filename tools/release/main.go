@@ -3,7 +3,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,7 +11,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"regexp"
 	"strconv"
@@ -138,17 +136,12 @@ func (t *tool) writef(format string, args ...any) error {
 func runCommand(ctx context.Context, timeout time.Duration, name string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, name, args...)
-	configureCancellation(cmd)
-	cmd.WaitDelay = 5 * time.Second
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	output, err := cmd.Output()
-	if ctx.Err() != nil {
-		return output, fmt.Errorf("%s: %w", name, ctx.Err())
+	output, stderr, err := commandOutput(ctx, name, args...)
+	if ctx.Err() != nil && !errors.Is(err, ctx.Err()) {
+		err = errors.Join(ctx.Err(), err)
 	}
 	if err != nil {
-		return output, fmt.Errorf("%s %s: %w\n%s", name, strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+		return output, fmt.Errorf("%s %s: %w\n%s", name, strings.Join(args, " "), err, strings.TrimSpace(string(stderr)))
 	}
 	return output, nil
 }
@@ -297,6 +290,39 @@ func (t *tool) checkReleaseAbsent(ctx context.Context, tag string) error {
 	if err != nil {
 		return err
 	}
+	if !found {
+		// REST's release-by-tag endpoint only finds published releases. Drafts
+		// use a pending tag name and need a separate authenticated lookup.
+		out, err := t.command(ctx, "gh", "api", "--hostname", "github.com", "--method", "POST", "graphql",
+			"-f", "query="+releaseByTagQuery, "-f", "owner=lennrt", "-f", "name=trial-lang", "-f", "tag="+tag)
+		if err != nil {
+			return fmt.Errorf("check pending release drafts: %w", err)
+		}
+		var result struct {
+			Data struct {
+				Repository *struct {
+					Release json.RawMessage `json:"release"`
+				} `json:"repository"`
+			} `json:"data"`
+			Errors []json.RawMessage `json:"errors"`
+		}
+		if err := json.Unmarshal([]byte(out), &result); err != nil {
+			return fmt.Errorf("read pending release draft response: %w", err)
+		}
+		if len(result.Errors) != 0 || result.Data.Repository == nil || len(result.Data.Repository.Release) == 0 {
+			return errors.New("cannot establish absence of pending release drafts: GitHub GraphQL lookup failed")
+		}
+		var pending *struct {
+			Draft bool   `json:"isDraft"`
+			URL   string `json:"url"`
+		}
+		if err := json.Unmarshal(result.Data.Repository.Release, &pending); err != nil {
+			return fmt.Errorf("read pending release draft: %w", err)
+		}
+		if pending != nil {
+			found, release.Draft, release.URL = true, pending.Draft, pending.URL
+		}
+	}
 	if found {
 		kind := "published"
 		if release.Draft {
@@ -306,6 +332,8 @@ func (t *tool) checkReleaseAbsent(ctx context.Context, tag string) error {
 	}
 	return nil
 }
+
+const releaseByTagQuery = `query($owner:String!,$name:String!,$tag:String!){repository(owner:$owner,name:$name){release(tagName:$tag){isDraft url}}}`
 
 func (t *tool) checkEnvironment(ctx context.Context) error {
 	var environment struct {

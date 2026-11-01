@@ -102,6 +102,13 @@ func (f *fixture) run(_ context.Context, timeout time.Duration, name string, arg
 			return nil, errors.New("connection lost after dispatch")
 		}
 		return text("https://github.com/lennrt/trial-lang/actions/runs/2")
+	case cmd == "gh api --hostname github.com --method POST graphql -f query="+releaseByTagQuery+" -f owner=lennrt -f name=trial-lang -f tag="+testTag:
+		var release any
+		if f.release {
+			release = map[string]any{"isDraft": f.draft, "url": "https://github.com/lennrt/trial-lang/releases/tag/" + testTag}
+		}
+		body, _ := json.Marshal(map[string]any{"data": map[string]any{"repository": map[string]any{"release": release}}})
+		return body, nil
 	case strings.HasPrefix(cmd, "gh api --hostname github.com --include --method GET repos/"+repository):
 		endpoint := strings.TrimPrefix(args[len(args)-1], "repos/"+repository)
 		switch {
@@ -123,7 +130,7 @@ func (f *fixture) run(_ context.Context, timeout time.Duration, name string, arg
 			}
 			return response(200, map[string]any{"protection_rules": rules})
 		case endpoint == "/releases/tags/"+testTag:
-			if !f.release {
+			if !f.release || f.draft {
 				return response(404, map[string]string{"message": "Not Found"})
 			}
 			return response(200, map[string]any{"draft": f.draft, "html_url": "https://github.com/lennrt/trial-lang/releases/tag/" + testTag})
@@ -648,5 +655,64 @@ func TestReleaseRejectsModuleIncompatibleMajorBeforeCommands(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestPendingDraftBlocksEveryReleaseMode(t *testing.T) {
+	for _, mode := range []string{"check", "release", "verify"} {
+		t.Run(mode, func(t *testing.T) {
+			f := newFixture(t)
+			f.release, f.draft = true, true
+			f.remote = tagState{object: tagObject, commit: testSHA}
+			args := []string{"-mode", mode}
+			if mode == "verify" {
+				args = append(args, "-sha", testSHA)
+			}
+			err := execute(t.Context(), args, testTag, &tool{run: f.run, out: &f.output})
+			if err == nil || !strings.Contains(err.Error(), "a draft release already exists") {
+				t.Fatalf("pending draft not rejected: %v", err)
+			}
+			if len(f.mutations()) != 0 {
+				t.Fatalf("draft collision mutated release state: %v", f.mutations())
+			}
+			lookedUpDraft := false
+			for _, command := range f.commands {
+				lookedUpDraft = lookedUpDraft || strings.Contains(command, "POST graphql")
+			}
+			if !lookedUpDraft {
+				t.Fatal("published-release REST 404 was treated as draft absence")
+			}
+		})
+	}
+}
+
+func TestDraftLookupFailuresBlockMutations(t *testing.T) {
+	for _, tc := range []struct {
+		name, response string
+		err            error
+	}{
+		{"transport", "", errors.New("lookup unavailable")},
+		{"malformed", "not JSON", nil},
+		{"GraphQL error", `{"data":{"repository":{"release":null}},"errors":[{"message":"denied"}]}`, nil},
+		{"inaccessible repository", `{"data":{"repository":null}}`, nil},
+		{"missing data", `{}`, nil},
+		{"missing release field", `{"data":{"repository":{}}}`, nil},
+		{"malformed release field", `{"data":{"repository":{"release":false}}}`, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(t)
+			run := func(ctx context.Context, timeout time.Duration, name string, args ...string) ([]byte, error) {
+				if name == "gh" && strings.Contains(strings.Join(args, " "), "POST graphql") {
+					return []byte(tc.response), tc.err
+				}
+				return f.run(ctx, timeout, name, args...)
+			}
+			if err := execute(t.Context(), []string{"-mode", "release"}, testTag, &tool{run: run, out: &f.output}); err == nil {
+				t.Fatal("failed draft lookup was treated as absence")
+			}
+			if len(f.mutations()) != 0 {
+				t.Fatalf("failed draft lookup mutated: %v", f.mutations())
+			}
+		})
 	}
 }

@@ -6,6 +6,7 @@ require (
 	github.com/twmb/franz-go v1.21.6
 	github.com/twmb/franz-go/pkg/kadm v1.18.0
 	github.com/twmb/franz-go/pkg/kmsg v1.13.1
+	golang.org/x/sys v0.47.0
 )
 
 require (
