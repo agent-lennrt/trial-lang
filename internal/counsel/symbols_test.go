@@ -92,12 +92,12 @@ func TestDocumentSymbolsProtocol(t *testing.T) {
 
 func TestDocumentSymbolsInvalidAndRanges(t *testing.T) {
 	for _, source := range []string{"", "FORM K-1.\nARTICLE", "not a filing"} {
-		if symbols := documentSymbols(source); len(symbols) != 0 {
+		if symbols := symbolsForTest(t, source); len(symbols) != 0 {
 			t.Fatalf("invalid source has symbols: %+v", symbols)
 		}
 	}
 	source := "FORM S-1.\r\nIN THE MATTER OF: library.\r\nTHE EXHIBIT OF pair, COMPRISING left AND right.\r\n  THE OFFICE OF answer.\r\n  SECTION 2.\r\n  REMAND WITH \"😀\"."
-	symbols := documentSymbols(source)
+	symbols := symbolsForTest(t, source)
 	if len(symbols) != 2 || symbols[0].Name != "pair" || symbols[0].Kind != 23 || symbols[1].Kind != 12 {
 		t.Fatalf("statute symbols: %+v", symbols)
 	}
@@ -111,6 +111,15 @@ func TestDocumentSymbolsInvalidAndRanges(t *testing.T) {
 	if len(office.Children) != 1 || office.Children[0].Range.End != office.Range.End {
 		t.Fatalf("section containment %+v", office)
 	}
+}
+
+func symbolsForTest(t *testing.T, source string) []documentSymbol {
+	t.Helper()
+	symbols, err := documentSymbols(t.Context(), source, maxMessageBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return symbols
 }
 
 func TestDocumentSymbolsSameLineProtocol(t *testing.T) {
