@@ -431,17 +431,8 @@ func (c *Court) Recover(ctx context.Context) error {
 	}
 
 	// Reenactment reuses recorded nondeterministic results.
-	recs, err = c.Log.ReadAll(ctx, c.Case.Ledger())
-	if err != nil {
+	if err := c.recoverLedger(ctx); err != nil {
 		return err
-	}
-	c.ledger = nil
-	for _, r := range recs {
-		var ev ledgerEvent
-		if err := json.Unmarshal(r.Value, &ev); err != nil {
-			return fmt.Errorf("the ledger contains an entry no one can read: %w", err)
-		}
-		c.ledger = append(c.ledger, ev)
 	}
 
 	// A case that has not started has zero-valued attention.
@@ -452,12 +443,39 @@ func (c *Court) Recover(ctx context.Context) error {
 	if err := validateRecoveredAttention(att); err != nil {
 		return err
 	}
+	if att.Ledger > int64(len(c.ledger)) {
+		// A concurrent instruction can commit between the ledger snapshot and
+		// attention read. Refresh only the ledger, retaining captured attention;
+		// a committed prefix must now be visible in its append-only history.
+		if err := c.recoverLedger(ctx); err != nil {
+			return err
+		}
+		if att.Ledger > int64(len(c.ledger)) {
+			return fmt.Errorf("the recorded attention has a Ledger cursor %d beyond the %d recorded ledger entries", att.Ledger, len(c.ledger))
+		}
+	}
 	c.pc = att.PC
 	c.summonsPos = att.Summons
 	c.heard = slices.Clone(att.Heard)
 	c.gazettePos = att.Gazette
 	c.ledgerPos = att.Ledger
 	c.note("The Court's attention rests at instruction %d. Dossier holds %d item(s); %d appeal(s) pending.", c.pc, len(c.stack), len(c.frames))
+	return nil
+}
+
+func (c *Court) recoverLedger(ctx context.Context) error {
+	records, err := c.Log.ReadAll(ctx, c.Case.Ledger())
+	if err != nil {
+		return err
+	}
+	c.ledger = nil
+	for _, record := range records {
+		var event ledgerEvent
+		if err := json.Unmarshal(record.Value, &event); err != nil {
+			return fmt.Errorf("the ledger contains an entry no one can read: %w", err)
+		}
+		c.ledger = append(c.ledger, event)
+	}
 	return nil
 }
 

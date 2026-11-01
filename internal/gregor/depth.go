@@ -83,6 +83,9 @@ func checkDepth(root depthRoot) error {
 				children = append(children, child)
 			}
 		})
+		if line <= 0 {
+			line = at.line
+		}
 		for _, child := range slices.Backward(children) {
 			pending = append(pending, entry{child, at.depth + 1, line})
 		}

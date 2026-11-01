@@ -72,3 +72,18 @@ func TestCompileImportedDepthOwnership(t *testing.T) {
 		t.Fatalf("import rejection = %+v (%v)", r, err)
 	}
 }
+
+func TestCompileDepthRetainsEnclosingPosition(t *testing.T) {
+	for _, innerLine := range []int{0, -1} {
+		var expr Expr = IntLit{Val: 1}
+		for range 255 {
+			expr = Transcript{Of: expr, Line: innerLine}
+		}
+		p := &Program{Articles: []Article{{source: "constructed", Line: 3, Stmts: []Stmt{Proclaim{Expr: expr, Line: 7}}}}}
+		_, err := Compile(p)
+		r, ok := errors.AsType[*RejectedFiling](err)
+		if !ok || r.Source != "constructed" || r.Line != 7 || r.Col != 1 || !strings.Contains(r.Particulars, "depth") {
+			t.Fatalf("Compile with inner line %d: rejection = %+v (%v)", innerLine, r, err)
+		}
+	}
+}

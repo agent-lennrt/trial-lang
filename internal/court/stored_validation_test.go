@@ -2,6 +2,7 @@ package court
 
 import (
 	"context"
+	"errors"
 	"math"
 	"strconv"
 	"strings"
@@ -117,5 +118,112 @@ func TestProceedAcceptsZeroStoredArity(t *testing.T) {
 				t.Fatal("empty schedule was not proclaimed")
 			}
 		})
+	}
+}
+
+func TestRecoverRejectsLedgerCursorPastRecordedPrefix(t *testing.T) {
+	for _, cursor := range []int64{1, math.MaxInt64} {
+		t.Run(strconv.FormatInt(cursor, 10), func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			log, c := convene(t, "FORM K-1.\nIN THE MATTER OF: damaged-ledger.\nARTICLE 1.\nPROCLAIM THE DISCRETION OF THE COURT BETWEEN 1 AND 1.\nPROCLAIM THE DISCRETION OF THE COURT BETWEEN 2 AND 2.")
+			defer log.Close()
+			if err := log.Commit(ctx, c, docket.Step{Ledger: cursor}); err != nil {
+				t.Fatal(err)
+			}
+			ct := &Court{Log: log, Case: c}
+			if err := ct.Recover(ctx); err == nil || !strings.Contains(strings.ToLower(err.Error()), "ledger") {
+				t.Fatalf("Recover error = %v; want invalid ledger prefix", err)
+			}
+			if _, err := ct.Proceed(ctx); err == nil || !strings.Contains(strings.ToLower(err.Error()), "ledger") {
+				t.Fatalf("Proceed error = %v; want invalid ledger prefix", err)
+			}
+		})
+	}
+}
+
+func TestRecoverAcceptsEveryRecordedLedgerPrefix(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	log, c := convene(t, "FORM K-1.\nIN THE MATTER OF: valid-ledger.\nARTICLE 1.\nPROCLAIM THE DISCRETION OF THE COURT BETWEEN 1 AND 1.\nPROCLAIM THE DISCRETION OF THE COURT BETWEEN 2 AND 2.\nADJOURN INDEFINITELY.")
+	defer log.Close()
+	if _, err := (&Court{Log: log, Case: c}).Proceed(ctx); err != nil {
+		t.Fatal(err)
+	}
+	ledger, err := log.ReadAll(ctx, c.Ledger())
+	if err != nil || len(ledger) != 2 {
+		t.Fatalf("ledger entries = %d, error = %v; want two recorded draws", len(ledger), err)
+	}
+	for cursor := int64(0); cursor <= int64(len(ledger)); cursor++ {
+		if err := log.Commit(ctx, c, docket.Step{Ledger: cursor}); err != nil {
+			t.Fatal(err)
+		}
+		ct := &Court{Log: log, Case: c}
+		if err := ct.Recover(ctx); err != nil || ct.ledgerPos != cursor {
+			t.Fatalf("Recover at prefix %d: cursor = %d, error = %v", cursor, ct.ledgerPos, err)
+		}
+	}
+}
+
+type ledgerSnapshotLog struct {
+	docket.Log
+	topic         string
+	reads         int
+	afterSnapshot func()
+	refreshErr    error
+}
+
+func (l *ledgerSnapshotLog) ReadAll(ctx context.Context, topic string) ([]docket.Record, error) {
+	if topic != l.topic {
+		return l.Log.ReadAll(ctx, topic)
+	}
+	l.reads++
+	if l.reads == 2 && l.refreshErr != nil {
+		return nil, l.refreshErr
+	}
+	records, err := l.Log.ReadAll(ctx, topic)
+	if err == nil && l.afterSnapshot != nil {
+		hook := l.afterSnapshot
+		l.afterSnapshot = nil
+		hook()
+	}
+	return records, err
+}
+
+func TestExamineRefreshesLedgerAfterConcurrentCommit(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	log, c := convene(t, "FORM K-1. IN THE MATTER OF: live-ledger. ARTICLE 1. PROCLAIM THE DISCRETION OF THE COURT BETWEEN 1 AND 1. ADJOURN INDEFINITELY.")
+	defer log.Close()
+	wrapped := &ledgerSnapshotLog{Log: log, topic: c.Ledger()}
+	wrapped.afterSnapshot = func() {
+		// Commit a real draw after Examine's ledger snapshot but before it
+		// reads attention, matching a status request during execution.
+		if outcome, err := (&Court{Log: log, Case: c}).Proceed(ctx); err != nil || outcome != OutcomeAdjourned {
+			t.Fatalf("concurrent Proceed = %v, %v", outcome, err)
+		}
+	}
+	status, err := Examine(ctx, wrapped, c)
+	if err != nil {
+		t.Fatalf("Examine rejected a concurrently committed ledger prefix: %v", err)
+	}
+	attention, err := log.Attention(ctx, c)
+	if err != nil || !status.Started || status.PC != attention.PC || wrapped.reads != 2 {
+		t.Fatalf("status=%+v, attention=%+v, ledger reads=%d, error=%v", status, attention, wrapped.reads, err)
+	}
+}
+
+func TestRecoverPropagatesLedgerRefreshFailure(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	log, c := convene(t, "FORM K-1. IN THE MATTER OF: unreadable-ledger. ARTICLE 1.")
+	defer log.Close()
+	if err := log.Commit(ctx, c, docket.Step{Ledger: 1}); err != nil {
+		t.Fatal(err)
+	}
+	cause := errors.New("ledger refresh failed")
+	wrapped := &ledgerSnapshotLog{Log: log, topic: c.Ledger(), refreshErr: cause}
+	if err := (&Court{Log: wrapped, Case: c}).Recover(ctx); !errors.Is(err, cause) {
+		t.Fatalf("Recover error = %v; want refresh error %v", err, cause)
 	}
 }
