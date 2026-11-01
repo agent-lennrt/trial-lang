@@ -35,7 +35,7 @@ not need Kafka for the quickstart. Local state lasts only until the command ends
 
 ## Quickstart
 
-Prerequisite: Go 1.27.2.
+Prerequisite: Go 1.27.3.
 
 Install the latest release:
 
@@ -140,7 +140,7 @@ appear once and that an audit can reproduce the result.
 
 ![Kafka-backed process recovery in triallang](docs/the-recovery.gif)
 
-Run it with Docker Compose and Go 1.27.2:
+Run it with Docker Compose and Go 1.27.3:
 
 ```console
 go build -o trial ./cmd/trial
@@ -177,7 +177,7 @@ the same terminal palette and window style, with pacing suited to its output.
 
 ## Live broker workflow
 
-Prerequisites: Docker with Compose and Go 1.27.2.
+Prerequisites: Docker with Compose and Go 1.27.3.
 
 Start one local KRaft broker:
 
@@ -285,7 +285,7 @@ decisions.
 
 ## Verification
 
-Run the required local checks with Go 1.27.2:
+Run the required local checks with Go 1.27.3:
 
 ```console
 make verify
@@ -298,7 +298,7 @@ Run the Kafka integration tests with the pinned Compose image:
 
 ```console
 docker compose up -d --wait --wait-timeout 120
-TRIAL_E2E_BROKER=localhost:9092 go test -timeout=10m ./internal/court ./cmd/trial \
+TRIAL_E2E_BROKER=localhost:9092 go test -timeout=10m ./internal/docket ./internal/court ./cmd/trial \
   -run '^(TestE2E|TestDifferential|TestCLI)' -count=1 -v
 go run ./cmd/trial dismiss
 ```
@@ -365,3 +365,7 @@ criteria. The badge above displays the current status of the public entry.
 
 The project uses the Apache License 2.0. Release archives include dependency
 license texts under `THIRD_PARTY_LICENSES`.
+
+For focused deposition iteration, use `trial test --run REGEXP examples` or
+`trial test --list examples`. CI consumers can use `trial test --json --require-tests examples`; see the [deposition reference](docs/depositions.md).
+Counsel also provides an AST-derived source outline through document symbols.

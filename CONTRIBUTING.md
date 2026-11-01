@@ -26,7 +26,7 @@ The maintainer aims to acknowledge reports and enhancement requests within
 
 ## Prerequisites
 
-- Go 1.27.2
+- Go 1.27.3
 - Docker with Compose for Kafka integration tests
 - Node.js 20.19.0 or later and npm for OpenSpec validation
 
@@ -71,7 +71,7 @@ Run the live-broker tests when Docker is available:
 
 ```console
 docker compose up -d --wait --wait-timeout 120
-TRIAL_E2E_BROKER=localhost:9092 go test -timeout=10m ./internal/court ./cmd/trial \
+TRIAL_E2E_BROKER=localhost:9092 go test -timeout=10m ./internal/docket ./internal/court ./cmd/trial \
   -run '^(TestE2E|TestDifferential|TestCLI)' -count=1 -v
 docker compose down
 ```

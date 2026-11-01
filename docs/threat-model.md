@@ -48,7 +48,9 @@ for cleanup. If loading, compilation, or stdout remains blocked, the command
 returns failure and process exit stops that remaining work. The final stderr
 diagnostic shares the same grace. Output and diagnostics can be incomplete.
 
-The timeout does not impose a total heap limit or a parser nesting limit.
+The timeout does not impose a total heap limit. Gregor independently limits
+active statement/factor parser entries and semantic AST paths to 256 each.
+Iterative tree validation precedes recursive examination and generation.
 The stdin helper can live until process exit. Programs can allocate substantial
 memory through retained execution records. Local execution is not a security sandbox. See
 [ADR 0004](adr/0004-brokerless-run.md).
@@ -134,6 +136,7 @@ Residual risks:
 | Resource | Bound |
 | --- | ---: |
 | Record key or value | 16 MiB |
+| Recursive syntax entries / semantic AST path | 256 each |
 | Recovery snapshot | 1,000,000 records and 256 MiB |
 | Execution-step appends | 10,000 |
 | Paperwork-batch appends | 100,000 and 64 MiB |
@@ -168,6 +171,15 @@ before building and publishing. The owner approves the protected environment.
 Preparation never approves that environment. Existing tags and release assets
 are not overwritten during recovery. The remaining network races and recovery
 steps are described in the [release procedure](releasing.md).
+
+## Invalid stored execution data
+
+Recovery rejects missing PUSH payloads and negative cursors before dereferencing
+or indexing. Execution validates collection/call counts before allocation and
+retains ordinary underflow verdicts. This prevents the reproduced panic classes;
+it is not comprehensive authentication of externally modified history.
+Kafka producer batch configuration accounts for the accepted key/value limits;
+broker and topic settings can still impose a smaller record size.
 
 ## Security sinks
 

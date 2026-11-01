@@ -4,6 +4,15 @@
 
 ### Fixed
 
+- Reject damaged recovery PUSH records, negative execution cursors, and invalid
+  collection/call operand counts before dereference, indexing or allocation.
+- Configure all Kafka producer paths for the documented record bound, including
+  key/value encoding overhead; broker/topic limits remain separately required.
+- Return resumable MCP observe prefixes that fit the actual encoded result
+  envelope, including JSON escaping expansion and the inclusive size boundary.
+- Reject release versions incompatible with the unsuffixed Go module path and
+  stop verification descendants on timeout, interruption or SIGTERM.
+
 - Run race-test packages sequentially so expensive example suites do not compete
   across packages. Keep every race check and the existing test deadlines.
 - Return docket-audit errors for unreadable commencement, archive, catalog,
@@ -64,6 +73,14 @@
 
 ### Changed
 
+- Pin active builds and checks to Go 1.27.3, fixing reachable standard-library
+  advisory [GO-2026-6809 / CVE-2026-111943](https://pkg.go.dev/vuln/GO-2026-6809)
+  in crypto/x509. Builds with Go 1.27.0–1.27.2 can retain trust in known
+  compromised intermediates in affected trust-store configurations; rebuild with
+  Go 1.27.3.
+- Bound recursive syntax entries and semantic AST paths to 256, with positioned
+  rejection before recursive compiler traversal. Existing ordinary examples fit.
+
 - Pin development, CI, and release builds to Go 1.27.2 to include the standard
   library security fixes reported by the repository's vulnerability scan.
 - Update golangci-lint to v2.15.0 so verification can read Go 1.27.2 export data,
@@ -85,6 +102,13 @@
   `reassign`, `usestdlibvars`, and `wastedassign` in lint.
 
 ### Added
+
+- Add Counsel document symbols for named declarations, articles, offices and
+  sections, using source order and UTF-16 ranges from the current buffer.
+- Add JSON Lines deposition reports with accurate result, cancellation and
+  summary records and opt-in transcripts.
+- Add deposition regex selection, execution-free listing, lexical path
+  deduplication and opt-in empty-suite failure for focused development and CI.
 
 - Add `make release-check TAG=vX.Y.Z` and `make release TAG=vX.Y.Z` to validate
   release prerequisites, prepare an immutable annotated tag, and dispatch the
