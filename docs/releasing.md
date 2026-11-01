@@ -39,6 +39,9 @@ The check verifies the explicit version, dated changelog, upstream write access,
 owner approval configuration, tag collisions, and successful latest main-push CI
 and Security runs for the selected commit. It requires the Kafka job to have passed.
 A missing, pending, skipped, or failed required check blocks preparation.
+Both published releases and pending-tag drafts block preparation. The helper
+checks drafts separately because GitHub's published-release-by-tag endpoint
+does not report them. A failed or incomplete draft lookup also blocks preparation.
 The current Go module path supports v0 and v1 release tags. A v2 or later
 release requires a major-version module-path migration before preparation.
 
@@ -54,8 +57,14 @@ workflow with the exact commit SHA. Git uses the same GitHub CLI credentials
 that preflight checked. `TAG` has no default and is separate from the development
 `VERSION` used by `make install`.
 
-If a local check times out or is interrupted, the helper terminates its command
-and descendants before returning. This includes the Go processes started by Make.
+If a local check times out or is interrupted, the helper terminates its owned
+command tree before returning. This includes the Go processes started by Make,
+even if Make has exited while a child keeps stdout or stderr open. A five-second
+inherited-pipe wait after the direct command exits triggers cleanup. Successful
+checks also clean up owned background children. Unix uses a process group and Windows
+uses a Job Object assigned before the command starts executing. Unix children
+that deliberately detach from their group are outside this cleanup boundary;
+pipe waiting remains bounded.
 
 The command reports dispatch, not a completed release. Open the
 [Release workflow](https://github.com/lennrt/trial-lang/actions/workflows/release.yml),

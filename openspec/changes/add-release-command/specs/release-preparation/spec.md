@@ -36,8 +36,12 @@ It MUST NOT approve the protected environment or publish assets directly.
 - **THEN** the helper can reuse the tag without replacing it
 
 #### Scenario: Tag or release collision
-- **WHEN** an existing tag is lightweight or points elsewhere, or a release already exists
+- **WHEN** an existing tag is lightweight or points elsewhere, or a published release or pending draft already exists
 - **THEN** the helper stops without moving the tag, deleting the release, or overwriting assets
+
+#### Scenario: Draft lookup fails
+- **WHEN** the published-release endpoint reports absence but the authenticated pending-draft lookup fails or returns incomplete repository data
+- **THEN** preflight and workflow verification fail closed before any release mutation
 
 #### Scenario: External command failure
 - **WHEN** verification, a network operation, tag push, or dispatch fails or times out
@@ -63,7 +67,10 @@ MUST remain in place.
 The helper SHALL reject release tags incompatible with this repository's
 unsuffixed Go module path before release mutations. It SHALL stop verification
 command descendants on cancellation, timeout and supported termination signals
-on Unix and Windows. Other Go platforms retain bounded parent cancellation and
+on Unix and Windows, including after the direct command exits while descendants
+retain its output pipes. A pipe-wait timeout SHALL also clean up the owned command
+tree. Successful completion SHALL not leave owned background descendants running.
+Other Go platforms retain bounded parent cancellation and
 are not supported for release preparation.
 
 #### Scenario: Unsupported module major
@@ -73,3 +80,7 @@ are not supported for release preparation.
 #### Scenario: Verification command is canceled
 - **WHEN** a check has spawned descendants and its context or termination signal cancels it
 - **THEN** supported platforms stop the command tree before reporting completion
+
+#### Scenario: Direct command exits before cancellation
+- **WHEN** a descendant retains output pipes after the original command exits and cancellation or the pipe-wait bound is reached
+- **THEN** the helper stops the owned descendant before returning and preserves the cancellation or timeout error

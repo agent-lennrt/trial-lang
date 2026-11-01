@@ -92,6 +92,32 @@ Run every example deposition:
 go run ./cmd/trial test examples
 ```
 
+### Focused tests and CI results
+
+Select matching deposition paths or list them without executing source:
+
+```console
+go run ./cmd/trial test --run 'hello|countdown' examples
+go run ./cmd/trial test --list --run wave-chamber examples
+```
+
+![Example brokerless test selection and discovery output](docs/testing-workflow.svg)
+
+The preview contains captured CLI output; timings vary. Selection matches cleaned,
+slash-separated paths and overlapping inputs run once. Put options before paths.
+
+For CI or editor integrations, stream JSON Lines and reject an accidentally empty
+suite:
+
+```console
+go run ./cmd/trial test --json --require-tests examples
+```
+
+Each result and the final summary is a separate JSON object. Add `--transcript`
+to include observed output. Cancellation distinguishes interrupted tests from
+files that were never run. See the [deposition reference](docs/depositions.md)
+for the schema, empty-selection policy, and exit codes.
+
 On Linux or macOS, build the CLI from this checkout:
 
 ```console
@@ -316,7 +342,8 @@ The CI, security, and release workflows do not run on a schedule. See
 
 Maintainers can check release prerequisites with `make release-check TAG=v0.2.0`.
 After owner authorization, `make release TAG=v0.2.0` prepares the annotated tag
-and starts the protected publishing workflow. The owner approves publication.
+and starts the protected publishing workflow. Existing drafts block preparation
+until they are inspected. The owner approves publication.
 See the [release procedure](docs/releasing.md) for metadata, access, and recovery.
 
 ## Interfaces
@@ -344,6 +371,11 @@ order. Open dependency buffers update the import context, and diagnostics point
 to the source file that owns the error. Without explicit dependencies, unknown
 imports retain syntax-only diagnostics. See [editor setup](editors/README.md).
 
+The editor outline lists constants, exhibits, articles, offices and sections
+from the current buffer, with Unicode-aware ranges. If an outline cannot fit
+the 16 MiB response limit, Counsel returns an error for that request and keeps
+the editor session open. It does not truncate the outline.
+
 `canon` is the only importable Go package. It provides embedded standard-library
 source, a dependency-ordered statute list, and executable Go examples. See the
 [package documentation](https://pkg.go.dev/github.com/lennrt/trial-lang/canon)
@@ -365,7 +397,3 @@ criteria. The badge above displays the current status of the public entry.
 
 The project uses the Apache License 2.0. Release archives include dependency
 license texts under `THIRD_PARTY_LICENSES`.
-
-For focused deposition iteration, use `trial test --run REGEXP examples` or
-`trial test --list examples`. CI consumers can use `trial test --json --require-tests examples`; see the [deposition reference](docs/depositions.md).
-Counsel also provides an AST-derived source outline through document symbols.

@@ -22,13 +22,20 @@ The read-only check performs no tag, push, workflow dispatch, or environment
 approval. The release command runs the existing local gates and rechecks its
 inputs before tagging. An identical annotated tag can be reused after a failed
 dispatch. A different tag target, lightweight tag, or existing release blocks
-publication; automatic recovery never deletes or moves tags.
+publication; automatic recovery never deletes or moves tags. Check pending-tag
+drafts separately through authenticated GraphQL because the REST release-by-tag
+endpoint only establishes published-release absence. Lookup errors fail closed.
 
 Dispatch carries the exact commit. The workflow validates main ancestry,
 checks, and the remote tag before building and again before publication. Its
 guard comes from the workflow revision, not arbitrary source selected by a tag.
 The protected release environment remains required. Each external command has
 a finite timeout and propagates failure before later mutations.
+Keep subprocess ownership through inherited output-pipe draining after the direct
+command exits. Unix keeps an unreaped fixed-shell group leader until cleanup;
+Windows assigns the suspended child to a kill-on-close Job Object before resume.
+Cleanup stops owned background descendants on success, cancellation or pipe-wait
+expiry. Unix children that deliberately detach are outside that group boundary.
 
 ## Risks / Trade-offs
 

@@ -2127,10 +2127,14 @@ chain, §18, is *one value*), can exceed it. This is an infrastructure
 error rather than a verdict (the case is innocent): the proceedings
 halt mid-instruction, uncommitted, and resume cleanly only if the
 broker's limit is raised. Break larger values into smaller records or raise the
-broker limit deliberately. Every client producer permits the existing 16 MiB key
-and 16 MiB value bounds plus encoded-record overhead; this does not raise the
-broker or topic limit. Configure `max.message.bytes` for a topic when accepting
-large records and account for replica/network limits in your broker deployment.
+broker limit deliberately. All append paths accept the existing 16 MiB key and
+16 MiB value bounds plus encoded-record overhead. Ordinary records retain the
+client's 1,000,012-byte batch cap. Records above that cap are sent alone, so
+raising the client bound for one record does not coalesce ordinary records into
+oversized batches. Transactional chunking preserves the single atomic commit.
+This does not raise the broker or topic limit. Configure `max.message.bytes` for
+a topic when accepting large records and account for replica/network limits in
+your broker deployment.
 
 ### 17.7 Throughput, latency, and what this machine is for
 

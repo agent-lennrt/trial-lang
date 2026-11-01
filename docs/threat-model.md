@@ -102,6 +102,11 @@ stored instructions or JSON. See [ADR 0012](adr/0012-custom-statute-editor-diagn
 
 Residual risk: LSP diagnostics may contain source-derived text. Editors must
 treat diagnostics as untrusted display data.
+Document-symbol positions use one source scan and sparse Unicode corrections.
+Outlines are budgeted against the complete 16 MiB response envelope. Oversized
+results return a bounded request error without truncation or session termination;
+transport failures still terminate the session. JSON responses use stdio encoding
+without HTML escaping, and preserve the request ID.
 
 ### Court to Kafka
 
@@ -171,15 +176,23 @@ before building and publishing. The owner approves the protected environment.
 Preparation never approves that environment. Existing tags and release assets
 are not overwritten during recovery. The remaining network races and recovery
 steps are described in the [release procedure](releasing.md).
+Pending-tag drafts require a separate authenticated lookup and also block
+preparation; lookup failures do not count as absence. External command ownership
+persists through output draining after the direct process exits. Cancellation,
+timeouts and pipe-wait expiry clean up the owned Unix process group or Windows
+Job Object. Deliberately detached Unix children are outside the group boundary.
 
 ## Invalid stored execution data
 
-Recovery rejects missing PUSH payloads and negative cursors before dereferencing
-or indexing. Execution validates collection/call counts before allocation and
+Recovery rejects missing PUSH payloads, negative cursors, and ledger cursors
+beyond the recovered entry count before dereferencing or indexing. Execution
+validates collection/call counts before allocation and
 retains ordinary underflow verdicts. This prevents the reproduced panic classes;
 it is not comprehensive authentication of externally modified history.
-Kafka producer batch configuration accounts for the accepted key/value limits;
-broker and topic settings can still impose a smaller record size.
+Kafka append paths account for the accepted key/value limits while retaining
+ordinary batch sizing. Large records are isolated instead of increasing the
+aggregate ordinary batch size. Broker and topic settings can still impose a
+smaller record size.
 
 ## Security sinks
 

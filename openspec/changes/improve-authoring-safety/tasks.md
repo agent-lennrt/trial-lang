@@ -20,3 +20,15 @@
 - [x] 3.4 Run relevant companion metrics/mutations and interpret results honestly.
 - [x] 3.5 Independently review actual integrated code and acceptance evidence.
 - [x] 3.6 Complete the consolidated repair cycle and final required checks.
+
+## 4. Follow-up adversarial review
+
+- [x] 4.1 Preserve ordinary Kafka batches while supporting isolated large records.
+- [x] 4.2 Reject excessive ledger cursors and retain enclosing manual-AST positions.
+- [x] 4.3 Remove outline prefix rescans and keep oversized responses recoverable.
+- [x] 4.4 Check pending release drafts and retain subprocess ownership through cleanup.
+- [x] 4.5 Refresh README examples, boundary documentation and captured CLI preview.
+- [x] 4.6 Independently review repairs and run required local checks.
+
+Hosted CI for the pushed revision is recorded in the pull request verification
+section before delivery.

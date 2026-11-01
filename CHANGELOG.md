@@ -4,14 +4,26 @@
 
 ### Fixed
 
-- Reject damaged recovery PUSH records, negative execution cursors, and invalid
-  collection/call operand counts before dereference, indexing or allocation.
+- Reject damaged recovery PUSH records, negative execution cursors, ledger cursors
+  beyond the recovered entry count, and invalid collection/call operand counts
+  before dereference, indexing or allocation.
+  Refresh a stale ledger snapshot before rejecting a cursor advanced by concurrent
+  execution, so status remains usable while a case runs.
 - Configure all Kafka producer paths for the documented record bound, including
   key/value encoding overhead; broker/topic limits remain separately required.
+  Preserve ordinary batch sizing and isolate large records to avoid combining
+  otherwise valid records past an unchanged topic limit.
 - Return resumable MCP observe prefixes that fit the actual encoded result
   envelope, including JSON escaping expansion and the inclusive size boundary.
 - Reject release versions incompatible with the unsuffixed Go module path and
   stop verification descendants on timeout, interruption or SIGTERM.
+- Detect pending draft releases before tag preparation or workflow dispatch.
+- Retain command-tree ownership through inherited output pipes after the direct
+  command exits, so cancellation and pipe-wait timeouts also stop descendants.
+- Convert outline positions without repeated line-prefix scans. Return a bounded
+  request error for an oversized outline and keep the editor session alive.
+- Preserve an enclosing source line when manually constructed AST nodes omit
+  their own position in a depth-limit error.
 
 - Run race-test packages sequentially so expensive example suites do not compete
   across packages. Keep every race check and the existing test deadlines.
@@ -158,8 +170,11 @@
 
 ### Compatibility
 
-- Stored JSON, opcodes, and the public Go API are unchanged. No new Go dependencies
-  are required. OpenSpec validation uses optional Node.js and npm tooling.
+- Stored JSON, opcodes, and the public Go API are unchanged. Windows release
+  preparation uses the existing transitive `golang.org/x/sys` version directly
+  to own command trees with Job Objects. Kafka wire tests use the existing
+  `franz-go/pkg/kmsg` version directly; no dependency version is upgraded.
+  OpenSpec validation uses optional Node.js and npm tooling.
 - Duplicate office parameters and malformed comment keywords now fail filing.
   Correct those invalid sources before recompiling them.
 - Corrected arithmetic can change replay results for historical cases affected

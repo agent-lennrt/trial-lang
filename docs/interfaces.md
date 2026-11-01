@@ -206,6 +206,12 @@ sections from the current open buffer. Symbols are ordered by source and use
 UTF-16 ranges, including CRLF documents. Syntactically invalid, closed or absent
 documents produce an empty list; parse-valid source can still have an outline
 when compilation reports errors. Outlining does not execute or load dependencies.
+Position conversion scans the source once instead of rescanning each declaration's
+line prefix. If the complete encoded response, including its request ID, exceeds
+16 MiB, the request returns error `-32603` with message
+`document symbols exceed response limit`. The outline is not truncated, and
+subsequent requests can continue in the same session. A transport write failure
+still ends the session.
 
 By default, documents with `INCORPORATE BY REFERENCE` receive syntax-only
 diagnostics. Start `trial counsel --canon` to also compile documents whose

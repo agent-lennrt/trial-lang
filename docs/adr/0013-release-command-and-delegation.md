@@ -29,8 +29,23 @@ existing workflow remains responsible for full verification and publication.
 Pin dispatch to the selected commit and revalidate the remote tag, main history,
 and successful checks in the workflow. Existing tags are immutable: reuse an
 identical annotated tag when recovering a failed dispatch, and reject mismatches.
-Do not replace an existing published release or silently retry an uncertain
-publication. Report the action completed and the next recovery step precisely.
+Check published releases through REST and pending-tag drafts through the
+authenticated GraphQL release lookup; REST's release-by-tag endpoint alone does
+not establish absence of a draft. Fail closed on lookup errors. Do not replace
+an existing draft or published release or silently retry an uncertain publication.
+Report the action completed and the next recovery step precisely.
+
+Retain command-tree ownership until output draining and cleanup finish, even if
+the direct command has exited. On Unix, a fixed shell supervisor separates exit
+status from inherited output and reserves the process-group identity until it
+is reaped. Arguments are positional data, not shell program text. On Windows,
+start the command suspended, assign a kill-on-close Job Object before resuming
+it, and retain that job through pipe waiting. Use the existing transitive
+`golang.org/x/sys` version directly for the documented Windows process APIs.
+Cancellation, timeouts and the five-second inherited-pipe wait bound clean up
+the owned group or job before return. Normal completion also cleans up owned
+background descendants. A descendant deliberately escaping its Unix group is
+outside this ownership boundary; pipe cleanup remains bounded.
 
 ## Consequences
 
