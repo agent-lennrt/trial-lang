@@ -626,3 +626,27 @@ func TestGateAndOutputFailuresBothRemainVisible(t *testing.T) {
 		t.Fatalf("failed gate mutated: %v", f.mutations())
 	}
 }
+
+func TestReleaseRejectsModuleIncompatibleMajorBeforeCommands(t *testing.T) {
+	for _, mode := range []string{"check", "release", "verify"} {
+		for _, tag := range []string{"v2.0.0", "v2.0.0-rc.1", "v999.1.2"} {
+			t.Run(mode+"/"+tag, func(t *testing.T) {
+				if err := validateTag(tag); err == nil {
+					t.Fatal("module-incompatible major accepted")
+				}
+				f := newFixture(t)
+				args := []string{"-mode", mode, "-tag", tag}
+				if mode == "verify" {
+					args = append(args, "-sha", testSHA)
+				}
+				err := execute(t.Context(), args, "", &tool{run: f.run, out: &f.output})
+				if err == nil || !strings.Contains(err.Error(), "module-path migration") {
+					t.Fatalf("want module compatibility error, got %v", err)
+				}
+				if len(f.commands) != 0 {
+					t.Fatalf("incompatible tag ran commands: %v", f.commands)
+				}
+			})
+		}
+	}
+}

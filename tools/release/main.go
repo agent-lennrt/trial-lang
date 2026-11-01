@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -44,8 +45,12 @@ type plan struct {
 	local, remote tagState
 }
 
+func interruptContext(parent context.Context) (context.Context, context.CancelFunc) {
+	return signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
+}
+
 func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := interruptContext(context.Background())
 	defer stop()
 	ctx, cancel := context.WithTimeout(ctx, time.Hour)
 	defer cancel()
@@ -102,6 +107,10 @@ func validateTag(tag string) error {
 	if !versionPattern.MatchString(tag) {
 		return errors.New("set TAG to an explicit canonical version such as v0.2.0 or v0.2.0-rc.1 (no build metadata)")
 	}
+	major, _, _ := strings.Cut(strings.TrimPrefix(tag, "v"), ".")
+	if major != "0" && major != "1" {
+		return errors.New("release major must be v0 or v1 for module github.com/lennrt/trial-lang; v2+ requires a major-version module-path migration")
+	}
 	_, prerelease, found := strings.Cut(tag, "-")
 	if found {
 		for part := range strings.SplitSeq(prerelease, ".") {
@@ -130,6 +139,7 @@ func runCommand(ctx context.Context, timeout time.Duration, name string, args ..
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
+	configureCancellation(cmd)
 	cmd.WaitDelay = 5 * time.Second
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

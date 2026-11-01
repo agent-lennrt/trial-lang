@@ -6,7 +6,7 @@ reviews and approves the protected `release` environment.
 
 ## Prepare the revision
 
-Use a clean source checkout with Go 1.27.2, Git, Make, and authenticated GitHub
+Use a clean source checkout with Go 1.27.3, Git, Make, and authenticated GitHub
 CLI (`gh`). The Makefile uses a POSIX shell; on Windows use Git Bash and Make.
 
 Before preparing a release:
@@ -39,6 +39,8 @@ The check verifies the explicit version, dated changelog, upstream write access,
 owner approval configuration, tag collisions, and successful latest main-push CI
 and Security runs for the selected commit. It requires the Kafka job to have passed.
 A missing, pending, skipped, or failed required check blocks preparation.
+The current Go module path supports v0 and v1 release tags. A v2 or later
+release requires a major-version module-path migration before preparation.
 
 After owner authorization, run:
 
@@ -51,6 +53,9 @@ annotated tag, pushes it to the upstream repository, and starts the Release
 workflow with the exact commit SHA. Git uses the same GitHub CLI credentials
 that preflight checked. `TAG` has no default and is separate from the development
 `VERSION` used by `make install`.
+
+If a local check times out or is interrupted, the helper terminates its command
+and descendants before returning. This includes the Go processes started by Make.
 
 The command reports dispatch, not a completed release. Open the
 [Release workflow](https://github.com/lennrt/trial-lang/actions/workflows/release.yml),

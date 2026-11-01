@@ -57,3 +57,19 @@ MUST remain in place.
 #### Scenario: Unverified or unmerged revision
 - **WHEN** the supplied commit is outside main history or lacks successful required checks
 - **THEN** the workflow rejects the release even when invoked without the helper
+
+### Requirement: Compatible versions and complete command cancellation
+
+The helper SHALL reject release tags incompatible with this repository's
+unsuffixed Go module path before release mutations. It SHALL stop verification
+command descendants on cancellation, timeout and supported termination signals
+on Unix and Windows. Other Go platforms retain bounded parent cancellation and
+are not supported for release preparation.
+
+#### Scenario: Unsupported module major
+- **WHEN** v2 or later is requested without a coordinated module-path migration
+- **THEN** preflight and workflow verification reject it before publication
+
+#### Scenario: Verification command is canceled
+- **WHEN** a check has spawned descendants and its context or termination signal cancels it
+- **THEN** supported platforms stop the command tree before reporting completion
