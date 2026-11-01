@@ -35,6 +35,9 @@ const (
 	// fetches plus this per-client broker-response bound keep idle cursors from
 	// prefetching indefinitely while still accepting every valid record.
 	maxKafkaFetchBytes = 2*MaxRecordBytes + 1<<20
+	// Records have no headers. A v2 batch header and record varints fit well
+	// inside this fixed allowance, including a maximum-sized key and value.
+	maxKafkaRecordBatchBytes = 2*MaxRecordBytes + 1024
 )
 
 var errKafkaLogClosed = errors.New("kafka log is closed")
@@ -111,6 +114,16 @@ func WithDiagnostic(report func(error)) KafkaOption {
 	}
 }
 
+// newKafkaProducerClient keeps every producer on the same bounded record
+// contract. Broker and topic message limits are configured separately.
+func newKafkaProducerClient(brokers []string, options ...kgo.Opt) (*kgo.Client, error) {
+	base := []kgo.Opt{
+		kgo.SeedBrokers(brokers...),
+		kgo.ProducerBatchMaxBytes(maxKafkaRecordBatchBytes),
+	}
+	return kgo.NewClient(append(base, options...)...)
+}
+
 // OpenKafkaLog opens and verifies a Kafka-backed Log. It owns all clients it
 // creates. Close releases them.
 func OpenKafkaLog(ctx context.Context, brokers string, options ...KafkaOption) (*KafkaLog, error) {
@@ -136,8 +149,7 @@ func OpenKafkaLog(ctx context.Context, brokers string, options ...KafkaOption) (
 	if config.diagnose == nil {
 		config.diagnose = func(error) {}
 	}
-	producer, err := kgo.NewClient(
-		kgo.SeedBrokers(seeds...),
+	producer, err := newKafkaProducerClient(seeds,
 		kgo.RequiredAcks(kgo.AllISRAcks()),
 	)
 	if err != nil {
@@ -198,8 +210,7 @@ func (k *KafkaLog) AppendBatch(ctx context.Context, appends []StepAppend) ([]int
 	if _, err := rand.Read(nonce[:]); err != nil {
 		return nil, fmt.Errorf("create batch transaction ID: %w", err)
 	}
-	client, err := kgo.NewClient(
-		kgo.SeedBrokers(k.brokers...),
+	client, err := newKafkaProducerClient(k.brokers,
 		kgo.RequiredAcks(kgo.AllISRAcks()),
 		kgo.TransactionalID("the-court.append."+hex.EncodeToString(nonce[:])),
 		kgo.TransactionTimeout(60*time.Second),
@@ -736,8 +747,7 @@ type attentionNote struct {
 }
 
 func (k *KafkaLog) newTransactionClient(c Case) (*kgo.Client, error) {
-	return kgo.NewClient(
-		kgo.SeedBrokers(k.brokers...),
+	return newKafkaProducerClient(k.brokers,
 		kgo.TransactionalID("the-court."+c.ID),
 		kgo.TransactionTimeout(60*time.Second),
 	)
