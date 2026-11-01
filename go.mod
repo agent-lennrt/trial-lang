@@ -1,6 +1,6 @@
 module github.com/lennrt/trial-lang
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/twmb/franz-go v1.21.6
